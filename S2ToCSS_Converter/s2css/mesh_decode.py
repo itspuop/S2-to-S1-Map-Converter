@@ -46,7 +46,7 @@ def _numeric_vec3_array(value: Any) -> list[list[float]] | None:
     return out
 
 
-def _find_position_stream(graph: dict, vertex_data_ref: Any) -> list[list[float]]:
+def _find_position_stream(graph: dict, vertex_data_ref: Any) -> tuple[list[list[float]], str]:
     _element(graph, vertex_data_ref, "vertexData")
     elements = graph["elements"]
     visited = set()
@@ -88,7 +88,7 @@ def _find_position_stream(graph: dict, vertex_data_ref: Any) -> list[list[float]
     tied = [c for c in candidates if c[0] == best[0] and len(c[1]) == len(best[1])]
     if len({str(c[1]) for c in tied}) > 1:
         raise MeshDecodeError("Multiple equally ranked vec3 streams found; position stream is ambiguous")
-    return best[1]
+    return best[1], best[2]
 
 
 def _int_array(attrs: dict, key: str) -> list[int]:
@@ -137,7 +137,7 @@ def decode_polygon_mesh(graph: dict, cmapmesh_element_index: int) -> dict:
     mesh_ref = attrs.get("meshData")
     mesh_element = _element(graph, mesh_ref, "meshData")
     mesh_attrs = mesh_element.get("attributes", {})
-    positions = _find_position_stream(graph, mesh_attrs.get("vertexData"))
+    positions, position_stream_source = _find_position_stream(graph, mesh_attrs.get("vertexData"))
     edge_vertices = _int_array(mesh_attrs, "edgeVertexIndices")
     edge_next = _int_array(mesh_attrs, "edgeNextIndices")
     face_edges = _int_array(mesh_attrs, "faceEdgeIndices")
@@ -154,6 +154,8 @@ def decode_polygon_mesh(graph: dict, cmapmesh_element_index: int) -> dict:
         "angles": attrs.get("angles", [0,0,0]),
         "scales": attrs.get("scales", attrs.get("scale", [1,1,1])),
         "meshData_index": _ref(mesh_ref),
+        "vertexData_index": _ref(mesh_attrs.get("vertexData")),
+        "position_stream_source": position_stream_source,
         "meshData_class": mesh_element.get("type"),
         "materials": mesh_attrs.get("materials", []),
         "positions_local": positions,

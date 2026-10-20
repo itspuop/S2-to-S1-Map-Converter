@@ -98,6 +98,7 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
                     center = tuple(sum(v[k] for v in vertices) / len(vertices) for k in range(3))
                     vmf.write(f' solid\n {{\n  "id" "{next_id}"\n')
                     next_id += 1
+                    # Use the shared VMF plane writer; it corrects face winding for Source 1 brush planes.
                     for face in faces:
                         a, b, c = _plane_points(face, vertices, center)
                         vmf.write(_vmf_side(next_id, a, b, c, "TOOLS/TOOLSNODRAW"))

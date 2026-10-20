@@ -1,127 +1,170 @@
-"""Decode polygon loops and positions from editable Source 2 VMAP DMX graphs.
+"""Decode native polygon topology from editable binary-DMX VMAP mesh nodes.
 
-This module extracts native CMapMesh / CDmePolygonMesh data. It does not yet create
-VMF brushes: brush suitability, convexity, winding, texture projection, and transform
-conventions must be validated before that step.
+This decoder targets the explicit CMapMesh -> CDmePolygonMesh topology references used
+by editable VMAP. It deliberately fails closed when a position stream or edge loop is
+ambiguous; no coordinates are fabricated.
 """
 from __future__ import annotations
-
+import math
+from pathlib import Path
 from typing import Any
+from .dmx_binary import DMXError, parse_binary_v9
 
 
-def _ref_index(value: Any) -> int | None:
+class MeshDecodeError(ValueError):
+    pass
+
+
+def _ref(value: Any) -> int | None:
     if isinstance(value, dict) and isinstance(value.get("element_index"), int):
         return value["element_index"]
     return None
 
 
-def _stream_data(elements: list[dict], array_ref: Any, semantic: str) -> list | None:
-    array_index = _ref_index(array_ref)
-    if array_index is None or not 0 <= array_index < len(elements):
+def _element(graph: dict, value: Any, label: str) -> dict:
+    index = _ref(value)
+    elements = graph["elements"]
+    if index is None or index < 0 or index >= len(elements):
+        raise MeshDecodeError(f"{label} is not a valid DMX element reference")
+    return elements[index]
+
+
+def _numeric_vec3_array(value: Any) -> list[list[float]] | None:
+    if not isinstance(value, list) or not value:
         return None
-    array_attrs = elements[array_index].get("attributes", {})
-    for stream_ref in array_attrs.get("streams", []):
-        stream_index = _ref_index(stream_ref)
-        if stream_index is None or not 0 <= stream_index < len(elements):
-            continue
-        stream = elements[stream_index]
-        attrs = stream.get("attributes", {})
-        if attrs.get("semanticName") == semantic or attrs.get("standardAttributeName") == semantic:
-            data = attrs.get("data")
-            if isinstance(data, list):
-                return data
-    return None
+    out = []
+    for item in value:
+        if not isinstance(item, (list, tuple)) or len(item) < 3:
+            return None
+        try:
+            v = [float(item[0]), float(item[1]), float(item[2])]
+        except (TypeError, ValueError):
+            return None
+        if not all(math.isfinite(n) for n in v):
+            return None
+        out.append(v)
+    return out
 
 
-def _int_array(attrs: dict, key: str) -> list[int] | None:
+def _find_position_stream(graph: dict, vertex_data_ref: Any) -> list[list[float]]:
+    _element(graph, vertex_data_ref, "vertexData")
+    elements = graph["elements"]
+    visited = set()
+    candidates = []
+
+    def walk(value: Any, path: str, depth: int = 0):
+        if depth > 8:
+            return
+        if isinstance(value, dict) and "element_index" in value:
+            index = _ref(value)
+            if index is None or index in visited or not (0 <= index < len(elements)):
+                return
+            visited.add(index)
+            e = elements[index]
+            attrs = e.get("attributes", {})
+            semantic = str(attrs.get("semantic", attrs.get("name", ""))).lower()
+            for key, child in attrs.items():
+                if key.lower() in ("data", "values", "positions", "position"):
+                    vectors = _numeric_vec3_array(child)
+                    if vectors:
+                        candidates.append((1 if "position" in semantic or key.lower() in ("positions", "position") else 0, vectors, f"{path}/{e.get('type')}[{key}]"))
+                walk(child, f"{path}/{e.get('type')}[{key}]", depth + 1)
+        elif isinstance(value, dict):
+            for key, child in value.items():
+                walk(child, f"{path}/{key}", depth + 1)
+        elif isinstance(value, list):
+            vectors = _numeric_vec3_array(value)
+            if vectors:
+                candidates.append((1 if "position" in path.lower() else 0, vectors, path))
+            else:
+                for i, child in enumerate(value):
+                    walk(child, f"{path}[{i}]", depth + 1)
+
+    walk({"element_index": _ref(vertex_data_ref)}, "vertexData")
+    if not candidates:
+        raise MeshDecodeError("No numeric vec3 position stream found beneath vertexData")
+    candidates.sort(key=lambda c: (c[0], len(c[1])), reverse=True)
+    best = candidates[0]
+    tied = [c for c in candidates if c[0] == best[0] and len(c[1]) == len(best[1])]
+    if len({str(c[1]) for c in tied}) > 1:
+        raise MeshDecodeError("Multiple equally ranked vec3 streams found; position stream is ambiguous")
+    return best[1]
+
+
+def _int_array(attrs: dict, key: str) -> list[int]:
     value = attrs.get(key)
-    if isinstance(value, list) and all(isinstance(v, int) for v in value):
-        return value
-    return None
+    if not isinstance(value, list):
+        raise MeshDecodeError(f"Polygon mesh attribute {key!r} is missing or not an array")
+    try:
+        return [int(v) for v in value]
+    except (TypeError, ValueError) as exc:
+        raise MeshDecodeError(f"Polygon mesh attribute {key!r} contains non-integer values") from exc
 
 
-def decode_polygon_mesh(elements: list[dict], node_index: int) -> dict:
-    """Decode one CMapMesh into local-space positions and ordered polygon loops."""
-    if not 0 <= node_index < len(elements):
-        raise ValueError(f"Element index {node_index} is out of range.")
-    node = elements[node_index]
+def _walk_faces(edge_vertices: list[int], edge_next: list[int], face_edges: list[int]) -> list[list[int]]:
+    if len(edge_vertices) != len(edge_next):
+        raise MeshDecodeError("edgeVertexIndices and edgeNextIndices lengths differ")
+    count = len(edge_next)
+    faces = []
+    for fi, start in enumerate(face_edges):
+        if not (0 <= start < count):
+            raise MeshDecodeError(f"Face {fi} starts at invalid edge {start}")
+        loop, edge, visited = [], start, set()
+        while edge not in visited:
+            if not (0 <= edge < count):
+                raise MeshDecodeError(f"Face {fi} edge loop points to invalid edge {edge}")
+            visited.add(edge)
+            loop.append(edge_vertices[edge])
+            edge = edge_next[edge]
+            if len(visited) > count:
+                raise MeshDecodeError(f"Face {fi} edge loop exceeded edge count")
+        if edge != start:
+            raise MeshDecodeError(f"Face {fi} edge loop enters a different cycle")
+        if len(loop) < 3:
+            raise MeshDecodeError(f"Face {fi} has fewer than three edges")
+        faces.append(loop)
+    return faces
+
+
+def decode_polygon_mesh(graph: dict, cmapmesh_element_index: int) -> dict:
+    elements = graph.get("elements", [])
+    if not isinstance(cmapmesh_element_index, int) or not (0 <= cmapmesh_element_index < len(elements)):
+        raise MeshDecodeError(f"CMapMesh element index out of range: {cmapmesh_element_index}")
+    node = elements[cmapmesh_element_index]
     if node.get("type") != "CMapMesh":
-        raise ValueError(f"Element {node_index} is {node.get('type')!r}, not CMapMesh.")
-
-    node_attrs = node.get("attributes", {})
-    mesh_index = _ref_index(node_attrs.get("meshData"))
-    if mesh_index is None or not 0 <= mesh_index < len(elements):
-        raise ValueError(f"CMapMesh element {node_index} has an unresolved meshData reference.")
-    mesh = elements[mesh_index]
-    attrs = mesh.get("attributes", {})
-    positions = _stream_data(elements, attrs.get("vertexData"), "position")
-    edge_vertices = _int_array(attrs, "edgeVertexIndices")
-    edge_next = _int_array(attrs, "edgeNextIndices")
-    edge_faces = _int_array(attrs, "edgeFaceIndices")
-    face_edges = _int_array(attrs, "faceEdgeIndices")
-    if positions is None:
-        raise ValueError(f"Mesh element {mesh_index} has no readable position stream.")
-    if not edge_vertices or not edge_next or not face_edges:
-        raise ValueError(f"Mesh element {mesh_index} is missing required topology arrays.")
-    if len(edge_next) != len(edge_vertices):
-        raise ValueError(
-            f"Mesh element {mesh_index}: edgeNextIndices length {len(edge_next)} "
-            f"does not match edgeVertexIndices length {len(edge_vertices)}."
-        )
-
-    points: list[list[float]] = []
-    for i, p in enumerate(positions):
-        if not isinstance(p, (list, tuple)) or len(p) < 3:
-            raise ValueError(f"Position {i} is not a 3-component vector.")
-        points.append([float(p[0]), float(p[1]), float(p[2])])
-
-    loops: list[dict] = []
-    for face_index, start in enumerate(face_edges):
-        if not 0 <= start < len(edge_next):
-            loops.append({"face_index": face_index, "valid": False, "error": "start edge out of range"})
-            continue
-        visited: list[int] = []
-        current = start
-        closed = False
-        for _ in range(len(edge_next) + 1):
-            if current == start and visited:
-                closed = True
-                break
-            if not 0 <= current < len(edge_next):
-                break
-            if current in visited:
-                break
-            visited.append(current)
-            next_edge = edge_next[current]
-            if edge_faces is not None and current < len(edge_faces) and edge_faces[current] != face_index:
-                # Record the mismatch rather than silently accepting a cross-face cycle.
-                pass
-            current = next_edge
-        vertex_ids = [edge_vertices[e] for e in visited]
-        valid_ids = all(0 <= v < len(points) for v in vertex_ids)
-        valid = closed and len(vertex_ids) >= 3 and valid_ids and len(set(vertex_ids)) >= 3
-        loops.append({
-            "face_index": face_index,
-            "edge_indices": visited,
-            "vertex_indices": vertex_ids,
-            "closed": closed,
-            "valid": valid,
-            **({"error": "loop did not close, had fewer than three distinct vertices, or referenced an invalid vertex"}
-               if not valid else {}),
-        })
-
-    return {
-        "node_index": node_index,
-        "node_guid": node.get("guid"),
-        "meshdata_index": mesh_index,
-        "origin": node_attrs.get("origin", [0, 0, 0]),
-        "angles": node_attrs.get("angles", [0, 0, 0]),
-        "scales": node_attrs.get("scales", [1, 1, 1]),
-        "materials": attrs.get("materials", []),
-        "positions_local": points,
-        "faces": loops,
-        "valid_face_count": sum(1 for f in loops if f["valid"]),
-        "invalid_face_count": sum(1 for f in loops if not f["valid"]),
+        raise MeshDecodeError(f"Element {cmapmesh_element_index} is {node.get('type')!r}, not CMapMesh")
+    attrs = node.get("attributes", {})
+    mesh_ref = attrs.get("meshData")
+    mesh_element = _element(graph, mesh_ref, "meshData")
+    mesh_attrs = mesh_element.get("attributes", {})
+    positions = _find_position_stream(graph, mesh_attrs.get("vertexData"))
+    edge_vertices = _int_array(mesh_attrs, "edgeVertexIndices")
+    edge_next = _int_array(mesh_attrs, "edgeNextIndices")
+    face_edges = _int_array(mesh_attrs, "faceEdgeIndices")
+    faces = _walk_faces(edge_vertices, edge_next, face_edges)
+    for fi, face in enumerate(faces):
+        if any(i < 0 or i >= len(positions) for i in face):
+            raise MeshDecodeError(f"Face {fi} references a vertex outside position stream ({len(positions)} vertices)")
+    result = {
+        "source_file": graph.get("source_file"),
+        "cmapmesh_element_index": cmapmesh_element_index,
+        "cmapmesh_guid": node.get("guid"),
+        "transform": {"origin": attrs.get("origin", [0,0,0]), "angles": attrs.get("angles", [0,0,0]), "scales": attrs.get("scales", attrs.get("scale", [1,1,1]))},
+        "origin": attrs.get("origin", [0,0,0]),
+        "angles": attrs.get("angles", [0,0,0]),
+        "scales": attrs.get("scales", attrs.get("scale", [1,1,1])),
+        "meshData_index": _ref(mesh_ref),
+        "meshData_class": mesh_element.get("type"),
+        "materials": mesh_attrs.get("materials", []),
+        "positions_local": positions,
+        "face_loops": faces,
+        "counts": {"vertices": len(positions), "faces": len(faces), "edges": len(edge_next)},
         "vmf_brush_ready": False,
-        "note": "Decoded polygon loops are not proof that the mesh is a closed convex solid suitable for a VMF brush.",
     }
+    return result
+
+
+def decode_vmap_mesh(vmap_path: str | Path, cmapmesh_element_index: int) -> dict:
+    graph = parse_binary_v9(vmap_path, include_binary=True)
+    graph["source_file"] = str(vmap_path)
+    return decode_polygon_mesh(graph, cmapmesh_element_index)

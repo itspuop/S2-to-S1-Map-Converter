@@ -165,6 +165,6 @@ def decode_polygon_mesh(graph: dict, cmapmesh_element_index: int) -> dict:
 
 
 def decode_vmap_mesh(vmap_path: str | Path, cmapmesh_element_index: int) -> dict:
-    graph = parse_binary_v9(vmap_path, include_binary=True)
+    graph = parse_binary_v9(vmap_path, include_binary=False)
     graph["source_file"] = str(vmap_path)
     return decode_polygon_mesh(graph, cmapmesh_element_index)

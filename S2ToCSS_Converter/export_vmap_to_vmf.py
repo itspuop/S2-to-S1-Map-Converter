@@ -126,8 +126,13 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
                 vertices = [_source_transform(p, origin, angles, scales) for p in positions]
                 if decoded is not None:
                     item["position_stream_source"] = decoded.get("position_stream_source")
+                    item["position_stream_candidates"] = decoded.get("position_stream_candidates", [])
                     item["local_geometry_metrics"] = _geometry_metrics(positions, faces)
                     item["geometry_metrics"] = _geometry_metrics(vertices, faces)
+                    # Keep detailed vertex/topology samples only for unusually large meshes.
+                    if item["local_geometry_metrics"].get("max_dimension", 0) > 8192:
+                        item["local_positions"] = positions
+                        item["face_loops"] = faces
                 if decoded is None:
                     validation = None
                 elif len(vertices) * len(faces) > MAX_VERTEX_FACE_PRODUCT:

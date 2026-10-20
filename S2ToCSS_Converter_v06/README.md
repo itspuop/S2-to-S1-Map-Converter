@@ -73,3 +73,21 @@ This prints JSON to the terminal and does not modify the map. The dump can be la
 ```bat
 py dump_mesh_topology.py "D:\\path\\to\\editable_map.vmap" --mesh-index 7 > mesh_topology.txt
 ```
+
+## Decode polygon loops for one mesh (experimental)
+
+The branch now includes an experimental decoder that reads the position stream and walks each face's half-edge loop using `faceEdgeIndices`, `edgeNextIndices`, and `edgeVertexIndices`. It writes diagnostic JSON only; it does not transform vertices into world space or generate VMF brushes yet.
+
+Run:
+
+```bat
+py decode_vmap_mesh.py "P:\\SteamLibrary\\steamapps\\common\\Counter-Strike Global Offensive\\content\\csgo_addons\\surf_the_wave\\maps\\surf_the_wave.vmap" --mesh-index 7 --output decoded_mesh_7.json
+```
+
+Review `valid_face_count`, `invalid_face_count`, each face's `vertex_indices`, and `positions_local`. Do not treat a valid loop as proof of a closed convex solid. The decoder is experimental and should be validated against more than one real mesh before it is used for conversion.
+
+Run its synthetic tests with:
+
+```bat
+py -m unittest test_mesh_decode.py
+```

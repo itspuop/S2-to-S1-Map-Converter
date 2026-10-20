@@ -91,3 +91,14 @@ Run its synthetic tests with:
 ```bat
 py -m unittest test_mesh_decode.py
 ```
+
+
+## Local-space geometry sanity checks (experimental)
+
+After decoding one mesh, run:
+
+```bat
+py validate_decoded_mesh.py decoded_mesh_7.json --output mesh_validation.json
+```
+
+The report checks polygon planarity, whether each face plane has all mesh vertices on one side, and whether polygon edges form a closed two-manifold. These are diagnostics only. It deliberately does not claim VMF readiness, apply the map transform, infer Source 1 texture projection, or export brushes. Test on several different meshes before relying on the results.

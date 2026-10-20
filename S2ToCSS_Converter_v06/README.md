@@ -53,3 +53,23 @@ py test_smoke.py
 ```
 
 The schema tests cover report-shape helpers. A real editable VMAP fixture is still needed to validate the exact mesh attribute and vertex-stream encoding before enabling automatic geometry export.
+
+## Dump full topology for one mesh
+
+The compact schema report summarizes long integer arrays. To inspect every connectivity index and the actual vertex/face data streams from the VMAP itself, run:
+
+```bat
+py dump_mesh_topology.py "D:\\path\\to\\editable_map.vmap"
+```
+
+It dumps the first CMapMesh by default. To select a specific CMapMesh element index from the schema report, pass `--mesh-index`:
+
+```bat
+py dump_mesh_topology.py "D:\\path\\to\\editable_map.vmap" --mesh-index 7
+```
+
+This prints JSON to the terminal and does not modify the map. The dump can be large; redirect it to a text file if needed:
+
+```bat
+py dump_mesh_topology.py "D:\\path\\to\\editable_map.vmap" --mesh-index 7 > mesh_topology.txt
+```

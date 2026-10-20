@@ -70,6 +70,12 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
     elements = graph.get("elements", [])
     mesh_nodes = [(i, n) for i, n in enumerate(elements) if n.get("type") == "CMapMesh"]
     total = len(mesh_nodes)
+    meshdata_users = {}
+    for mesh_i, mesh_node in mesh_nodes:
+        mesh_ref = mesh_node.get("attributes", {}).get("meshData")
+        mesh_ref_i = mesh_ref.get("element_index") if isinstance(mesh_ref, dict) else None
+        if isinstance(mesh_ref_i, int):
+            meshdata_users.setdefault(mesh_ref_i, []).append(mesh_i)
     print(f"[2/3] Found {total:,} CMapMesh nodes across {len(elements):,} DMX elements.", flush=True)
     processing_started = time.monotonic()
     # Complex meshes are intended for the user to convert to models in Hammer.
@@ -95,7 +101,10 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
             attrs = node.get("attributes", {})
             mesh_ref = attrs.get("meshData")
             mesh_index = mesh_ref.get("element_index") if isinstance(mesh_ref, dict) else None
+            item["meshData_index"] = mesh_index
+            item["meshData_shared_by_CMapMesh_elements"] = meshdata_users.get(mesh_index, []) if isinstance(mesh_index, int) else []
             mesh_attrs = elements[mesh_index].get("attributes", {}) if isinstance(mesh_index, int) and 0 <= mesh_index < len(elements) else {}
+            item["vertexData_index"] = mesh_attrs.get("vertexData", {}).get("element_index") if isinstance(mesh_attrs.get("vertexData"), dict) else None
             edge_count = len(mesh_attrs.get("edgeNextIndices", [])) if isinstance(mesh_attrs.get("edgeNextIndices"), list) else 0
             face_count = len(mesh_attrs.get("faceEdgeIndices", [])) if isinstance(mesh_attrs.get("faceEdgeIndices"), list) else 0
             # Announce the current mesh before decoding, so a single expensive mesh is visible.
@@ -116,6 +125,8 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
                 scales = decoded.get("scales", [1, 1, 1]) if decoded else [1, 1, 1]
                 vertices = [_source_transform(p, origin, angles, scales) for p in positions]
                 if decoded is not None:
+                    item["position_stream_source"] = decoded.get("position_stream_source")
+                    item["local_geometry_metrics"] = _geometry_metrics(positions, faces)
                     item["geometry_metrics"] = _geometry_metrics(vertices, faces)
                 if decoded is None:
                     validation = None

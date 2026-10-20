@@ -214,7 +214,7 @@ def export_decoded_mesh(document: dict, output_path: str | Path, material="TOOLS
         ' "editorversion" "400"\n "editorbuild" "0"\n "mapversion" "1"\n "formatversion" "100"\n "prefab" "0"\n}\n',
         "visgroups\n{\n}\nviewsettings\n{\n",
         ' "bSnapToGrid" "1"\n "bShowGrid" "1"\n "bShowLogicalGrid" "0"\n "nGridSpacing" "64"\n "bShow3DGrid" "0"\n}\n',
-        "world\n{\n ' "id" "1"\n'.replace("'", ""),
+        'world\n{\n "id" "1"\n',
         ' "mapversion" "1"\n "classname" "worldspawn"\n "detailmaterial" "detail/detailsprites"\n "detailvbsp" "detail.vbsp"\n "maxpropscreenwidth" "-1"\n "skyname" "sky_day01_01"\n',
         " solid\n {\n  \"id\" \"2\"\n",
     ]

@@ -129,10 +129,28 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
                     item["position_stream_candidates"] = decoded.get("position_stream_candidates", [])
                     item["local_geometry_metrics"] = _geometry_metrics(positions, faces)
                     item["geometry_metrics"] = _geometry_metrics(vertices, faces)
-                    # Keep detailed vertex/topology samples only for unusually large meshes.
+                    # Preserve topology details for meshes that may pass validation but export
+                    # incorrectly. Duplicate coordinates with different indices can hide broken
+                    # topology from index-based manifold checks.
+                    duplicate_position_pairs = []
+                    for pi, p in enumerate(positions):
+                        for qi in range(pi + 1, len(positions)):
+                            q = positions[qi]
+                            if all(abs(float(p[k]) - float(q[k])) <= 1e-5 for k in range(3)):
+                                duplicate_position_pairs.append([pi, qi])
+                    diagnostic_flags = []
+                    if duplicate_position_pairs:
+                        diagnostic_flags.append("duplicate_position_coordinates")
+                    if len(positions) >= 8 and len(faces) < 6:
+                        diagnostic_flags.append("fewer_than_six_faces_for_mesh_with_eight_or_more_position_entries")
                     if item["local_geometry_metrics"].get("max_dimension", 0) > 8192:
+                        diagnostic_flags.append("very_large_local_bounds")
+                    if diagnostic_flags:
+                        item["diagnostic_flags"] = diagnostic_flags
+                        item["duplicate_position_index_pairs"] = duplicate_position_pairs
                         item["local_positions"] = positions
                         item["face_loops"] = faces
+                        item["transformed_positions"] = vertices
                 if decoded is None:
                     validation = None
                 elif len(vertices) * len(faces) > MAX_VERTEX_FACE_PRODUCT:

@@ -91,6 +91,42 @@ def _find_position_stream(graph: dict, vertex_data_ref: Any) -> tuple[list[list[
     return best[1], best[2]
 
 
+def _describe_position_streams(graph: dict, vertex_data_ref: Any) -> list[dict]:
+    """Describe direct vertex streams so position-stream selection can be audited."""
+    try:
+        vertex_data = _element(graph, vertex_data_ref, "vertexData")
+    except MeshDecodeError:
+        return []
+    attrs = vertex_data.get("attributes", {})
+    streams = attrs.get("streams", [])
+    elements = graph.get("elements", [])
+    result = []
+    if not isinstance(streams, list):
+        return result
+    for stream_ref in streams:
+        index = _ref(stream_ref)
+        if index is None or not (0 <= index < len(elements)):
+            result.append({"stream_element_index": index, "error": "invalid stream reference"})
+            continue
+        stream = elements[index]
+        sa = stream.get("attributes", {})
+        data = sa.get("data")
+        row = {
+            "stream_element_index": index,
+            "stream_type": stream.get("type"),
+            "stream_name": stream.get("name"),
+            "semantic": sa.get("semantic"),
+            "name_attribute": sa.get("name"),
+            "format": sa.get("format"),
+            "data_type": type(data).__name__,
+            "data_length": len(data) if isinstance(data, list) else None,
+        }
+        if isinstance(data, list):
+            row["first_values"] = data[:8]
+        result.append(row)
+    return result
+
+
 def _int_array(attrs: dict, key: str) -> list[int]:
     value = attrs.get(key)
     if not isinstance(value, list):
@@ -156,6 +192,7 @@ def decode_polygon_mesh(graph: dict, cmapmesh_element_index: int) -> dict:
         "meshData_index": _ref(mesh_ref),
         "vertexData_index": _ref(mesh_attrs.get("vertexData")),
         "position_stream_source": position_stream_source,
+        "position_stream_candidates": _describe_position_streams(graph, mesh_attrs.get("vertexData")),
         "meshData_class": mesh_element.get("type"),
         "materials": mesh_attrs.get("materials", []),
         "positions_local": positions,

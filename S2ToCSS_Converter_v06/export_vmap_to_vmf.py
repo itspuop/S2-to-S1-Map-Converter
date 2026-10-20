@@ -77,9 +77,9 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
                 else:
                     positions, faces = _extract_mesh(decoded)
                 positions, faces = _extract_mesh(decoded)
-                origin = decoded.get("origin", [0, 0, 0])
-                angles = decoded.get("angles", [0, 0, 0])
-                scales = decoded.get("scales", [1, 1, 1])
+                origin = decoded.get("origin", [0, 0, 0]) if decoded else [0, 0, 0]
+                angles = decoded.get("angles", [0, 0, 0]) if decoded else [0, 0, 0]
+                scales = decoded.get("scales", [1, 1, 1]) if decoded else [1, 1, 1]
                 vertices = [_source_transform(p, origin, angles, scales) for p in positions]
                 if decoded is None:
                     validation = None

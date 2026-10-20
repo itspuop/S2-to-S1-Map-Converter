@@ -27,6 +27,41 @@ def _vmf_header() -> str:
     )
 
 
+def _geometry_metrics(vertices, faces) -> dict:
+    """Compact size diagnostics to identify malformed or unexpectedly huge meshes."""
+    if not vertices:
+        return {}
+    mins = [min(v[k] for v in vertices) for k in range(3)]
+    maxs = [max(v[k] for v in vertices) for k in range(3)]
+    max_edge = 0.0
+    max_face_span = 0.0
+    max_face_index = None
+    for fi, face in enumerate(faces):
+        points = [vertices[i] for i in face]
+        for j, p in enumerate(points):
+            q = points[(j + 1) % len(points)]
+            length = sum((p[k] - q[k]) ** 2 for k in range(3)) ** 0.5
+            if length > max_edge:
+                max_edge = length
+        span = 0.0
+        for i, p in enumerate(points):
+            for q in points[i + 1:]:
+                span = max(span, sum((p[k] - q[k]) ** 2 for k in range(3)) ** 0.5)
+        if span > max_face_span:
+            max_face_span = span
+            max_face_index = fi
+    size = [maxs[k] - mins[k] for k in range(3)]
+    return {
+        "bounds_min": [round(v, 4) for v in mins],
+        "bounds_max": [round(v, 4) for v in maxs],
+        "bounds_size": [round(v, 4) for v in size],
+        "max_dimension": round(max(size), 4),
+        "max_edge_length": round(max_edge, 4),
+        "largest_face_span": round(max_face_span, 4),
+        "largest_face_index": max_face_index,
+    }
+
+
 def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | None = None) -> dict:
     started = time.monotonic()
     print(f"[1/3] Parsing editable VMAP: {vmap_path}", flush=True)
@@ -80,6 +115,8 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
                 angles = decoded.get("angles", [0, 0, 0]) if decoded else [0, 0, 0]
                 scales = decoded.get("scales", [1, 1, 1]) if decoded else [1, 1, 1]
                 vertices = [_source_transform(p, origin, angles, scales) for p in positions]
+                if decoded is not None:
+                    item["geometry_metrics"] = _geometry_metrics(vertices, faces)
                 if decoded is None:
                     validation = None
                 elif len(vertices) * len(faces) > MAX_VERTEX_FACE_PRODUCT:

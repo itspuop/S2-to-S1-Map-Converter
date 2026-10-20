@@ -162,7 +162,9 @@ def _plane_points(face, vertices, center):
     points = [vertices[i] for i in face]
     normal = _face_normal(points)
     face_center = tuple(sum(p[k] for p in points)/len(points) for k in range(3))
-    if _dot(normal, _sub(face_center, center)) < 0:
+    # VMF brush plane points must wind toward the brush interior. The decoded
+    # polygon normal is oriented outward here, so reverse outward-facing loops.
+    if _dot(normal, _sub(face_center, center)) > 0:
         points.reverse()
     # VMF stores a plane using three non-collinear points.
     a = points[0]

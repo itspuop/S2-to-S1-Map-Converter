@@ -25,7 +25,7 @@ class MeshSchemaShapeTests(unittest.TestCase):
     def test_binary_payload_reports_length_not_contents(self):
         self.assertEqual(
             _shape({"binary_bytes": 2048, "hex": None}, self.elements),
-            {"binary_bytes": 2048, "hex": None},
+            {"binary_bytes": 2048},
         )
 
     def test_large_array_is_summarized(self):

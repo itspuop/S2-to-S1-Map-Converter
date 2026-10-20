@@ -149,6 +149,9 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
                     skipped += 1
                 else:
                     center = tuple(sum(v[k] for v in vertices) / len(vertices) for k in range(3))
+                    item["vmf_solid_id"] = next_id
+                    # Keep a source-mesh marker in the VMF text so exported solids can be traced.
+                    vmf.write(f' // Source CMapMesh element {index} | GUID {node.get("guid")}\n')
                     vmf.write(f' solid\n {{\n  "id" "{next_id}"\n')
                     next_id += 1
                     # Use the shared VMF plane writer; it corrects face winding for Source 1 brush planes.

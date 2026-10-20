@@ -29,6 +29,44 @@ py inspect_mesh_schema.py "D:\\path\\to\\editable_map.vmap" "D:\\reports\\mesh_s
 
 Use the editable .vmap, not .vmap_c. The JSON may contain a lot of mesh attributes, so open it in a text editor or VS Code.
 
+## Experimental native VMAP to VMF brush export
+
+The v0.7 branch now has an early end-to-end path for native polygon meshes in an
+**editable binary-DMX .vmap**. It does not require .vmap_c or Source 2 Viewer.
+
+1. Decode a single mesh for inspection:
+
+```bat
+py decode_vmap_mesh.py "D:\\path\\to\\map.vmap" --mesh-index 7 --output mesh_7.json
+```
+
+2. Export that decoded mesh as one VMF brush (only if it passes geometric checks):
+
+```bat
+py export_decoded_mesh_vmf.py mesh_7.json --output mesh_7.vmf --report mesh_7_validation.json
+```
+
+3. Or scan the editable VMAP and export all meshes that pass the closed/planar/convex
+   brush checks into one VMF, while listing skipped meshes for manual handling:
+
+```bat
+py export_vmap_to_vmf.py "D:\\path\\to\\map.vmap" --output "D:\\out\\map_brushes.vmf" --report "D:\\out\\map_report.json"
+```
+
+Exported faces currently use `TOOLS/TOOLSNODRAW` deliberately. Source 2 VMAT-to-VMT
+translation, entity conversion, model compilation, displacement conversion, and automatic
+splitting of complex meshes are not implemented. The report identifies each exported
+brush and each skipped mesh with its validation reason. Review generated geometry in
+Hammer before compiling; a successful file write is not a guarantee that a complete map
+is playable.
+
+Run the local checks from this directory:
+
+```bat
+py -m unittest test_mesh_decode.py test_vmf_export.py
+py test_smoke.py
+```
+
 ## Existing v0.6 workflow
 
 - Run run_converter.bat to open the GUI.
@@ -41,7 +79,7 @@ Python 3.10+ is recommended. The core DMX inventory and schema inspector use the
 
 ## Current limitations
 
-This branch does **not** yet create a playable CS:S map directly from VMAP. Native mesh schema inspection is the first verification step toward vertex-stream decoding, polygon reconstruction, transform composition, closed-solid/convexity checks, and VMF generation. Complex meshes will continue to be flagged for the manual model workflow discussed for this project. Source 2 materials, model compilation, entity/I/O conversion, and full texture translation also remain future work.
+This branch now has an experimental native mesh decode and VMF brush-export path. It is not yet a complete playable-map converter: geometry that fails closed-solid/planar/convex checks is skipped, all exported faces use nodraw, and entities, material translation, model compilation, displacement support, and broader real-map validation remain future work. Complex meshes continue to be flagged for the manual model workflow discussed for this project. Source 2 materials, model compilation, entity/I/O conversion, and full texture translation also remain future work.
 
 ## Tests
 

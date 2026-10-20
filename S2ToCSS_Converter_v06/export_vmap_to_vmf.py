@@ -36,6 +36,12 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
     mesh_nodes = [(i, n) for i, n in enumerate(elements) if n.get("type") == "CMapMesh"]
     total = len(mesh_nodes)
     print(f"[2/3] Found {total:,} CMapMesh nodes across {len(elements):,} DMX elements.", flush=True)
+    processing_started = time.monotonic()
+    # Complex meshes are intended for the user to convert to models in Hammer.
+    # Bound worst-case validation time instead of letting one mesh stall the batch.
+    MAX_EDGES = 5000
+    MAX_FACES = 1500
+    MAX_VERTEX_FACE_PRODUCT = 2_000_000
     if total == 0:
         print("No CMapMesh nodes were found; writing an empty world VMF.", flush=True)
 
@@ -50,17 +56,43 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
         skipped = 0
         for ordinal, (index, node) in enumerate(mesh_nodes, start=1):
             item = {"cmapmesh_element_index": index, "name": node.get("name"), "guid": node.get("guid")}
+            mesh_started = time.monotonic()
+            attrs = node.get("attributes", {})
+            mesh_ref = attrs.get("meshData")
+            mesh_index = mesh_ref.get("element_index") if isinstance(mesh_ref, dict) else None
+            mesh_attrs = elements[mesh_index].get("attributes", {}) if isinstance(mesh_index, int) and 0 <= mesh_index < len(elements) else {}
+            edge_count = len(mesh_attrs.get("edgeNextIndices", [])) if isinstance(mesh_attrs.get("edgeNextIndices"), list) else 0
+            face_count = len(mesh_attrs.get("faceEdgeIndices", [])) if isinstance(mesh_attrs.get("faceEdgeIndices"), list) else 0
+            # Announce the current mesh before decoding, so a single expensive mesh is visible.
+            print(f"  Processing mesh {ordinal:,}/{total:,} (element {index}, edges {edge_count:,}, faces {face_count:,})...", flush=True)
             try:
-                decoded = decode_polygon_mesh(graph, index)
+                if edge_count > MAX_EDGES or face_count > MAX_FACES:
+                    item.update({"status": "manual_or_unsupported", "reason": f"Mesh exceeds safe brush-export limit ({edge_count} edges / {face_count} faces; limits {MAX_EDGES} / {MAX_FACES}). Convert this complex mesh to a model in Hammer."})
+                    skipped += 1
+                    decoded = None
+                else:
+                    decoded = decode_polygon_mesh(graph, index)
+                if decoded is None:
+                    positions, faces = [], []
+                else:
+                    positions, faces = _extract_mesh(decoded)
                 positions, faces = _extract_mesh(decoded)
                 origin = decoded.get("origin", [0, 0, 0])
                 angles = decoded.get("angles", [0, 0, 0])
                 scales = decoded.get("scales", [1, 1, 1])
                 vertices = [_source_transform(p, origin, angles, scales) for p in positions]
-                validation = validate_convex_brush(vertices, faces)
-                item["validation"] = validation
-                item["counts"] = decoded.get("counts")
-                if not validation["valid"]:
+                if decoded is None:
+                    validation = None
+                elif len(vertices) * len(faces) > MAX_VERTEX_FACE_PRODUCT:
+                    validation = {"valid": False, "issues": [f"Validation complexity limit exceeded ({len(vertices)} vertices x {len(faces)} faces); convert this complex mesh to a model in Hammer."]}
+                else:
+                    validation = validate_convex_brush(vertices, faces)
+                if decoded is not None:
+                    item["validation"] = validation
+                    item["counts"] = decoded.get("counts")
+                if decoded is None:
+                    pass  # Preflight already marked this oversized mesh as skipped.
+                elif not validation["valid"]:
                     item.update({"status": "manual_or_unsupported", "reason": "; ".join(validation["issues"])})
                     skipped += 1
                 else:
@@ -82,11 +114,13 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
             results.append(item)
 
             # Keep the console responsive and persist the report during long conversions.
+            mesh_elapsed = time.monotonic() - mesh_started
+            print(f"    Finished mesh {ordinal:,}/{total:,} in {mesh_elapsed:.2f}s | brushes {exported:,} | skipped {skipped:,}", flush=True)
             if ordinal == 1 or ordinal % 10 == 0 or ordinal == total:
-                elapsed = time.monotonic() - started
+                elapsed = time.monotonic() - processing_started
                 rate = ordinal / elapsed if elapsed > 0 else 0
                 eta = (total - ordinal) / rate if rate > 0 else 0
-                print(f"  Mesh {ordinal:,}/{total:,} | brushes {exported:,} | skipped {skipped:,} | elapsed {elapsed:.1f}s | ETA ~{eta:.1f}s", flush=True)
+                print(f"  Progress {ordinal:,}/{total:,} | elapsed processing {elapsed:.1f}s | ETA ~{eta:.1f}s", flush=True)
                 if report_path:
                     partial = {
                         "source_file": str(vmap_path), "output_vmf": str(output_path),

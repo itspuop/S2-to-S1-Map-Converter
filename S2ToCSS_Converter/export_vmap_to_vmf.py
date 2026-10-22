@@ -566,8 +566,8 @@ def main(argv=None) -> int:
     report = args.report or output.with_name(output.stem + "_report.json")
     try:
         if args.material_map is not None and not args.material_map.is_file():
-        parser.error(f"Material mapping JSON not found: {args.material_map}")
-    result = export_vmap_to_vmf(args.vmap, output, report, args.materials_root, args.material_map)
+            parser.error(f"Material mapping JSON not found: {args.material_map}")
+        result = export_vmap_to_vmf(args.vmap, output, report, args.materials_root, args.material_map)
     except (OSError, DMXError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr, flush=True)
         return 1

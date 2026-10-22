@@ -45,6 +45,7 @@ class ConverterApp:
         self.output_file = tk.StringVar()
         self.report_file = tk.StringVar()
         self.materials_root = tk.StringVar()
+        self.material_map_file = tk.StringVar()
         self.status = tk.StringVar(value="Ready — choose an editable .vmap file.")
         self.open_output = tk.BooleanVar(value=False)
 
@@ -62,6 +63,7 @@ class ConverterApp:
         self.path_row(outer, "Converter folder", self.converter_dir, self.pick_converter, "Browse…")
         self.path_row(outer, "Input .vmap", self.input_file, self.pick_input, "Choose map…")
         self.path_row(outer, "Materials folder", self.materials_root, self.pick_materials, "Choose folder…")
+        self.path_row(outer, "Material map JSON", self.material_map_file, self.pick_material_map, "Choose file…")
         self.path_row(outer, "Output .vmf", self.output_file, self.pick_output, "Save as…")
         self.path_row(outer, "JSON report", self.report_file, self.pick_report, "Save as…")
 
@@ -125,6 +127,14 @@ class ConverterApp:
         path = filedialog.askdirectory(title="Choose addon materials folder (the folder containing dev, etc.)")
         if path:
             self.materials_root.set(path)
+
+    def pick_material_map(self):
+        path = filedialog.askopenfilename(
+            title="Choose generated Source 1 material mapping",
+            filetypes=[("JSON mapping", "*.json"), ("All files", "*.*")],
+        )
+        if path:
+            self.material_map_file.set(path)
 
     def pick_output(self):
         path = filedialog.asksaveasfilename(
@@ -206,6 +216,13 @@ class ConverterApp:
             python_executable(), str(script), str(source),
             "--output", str(output), "--report", str(report),
         ]
+        material_map_text = self.material_map_file.get().strip()
+        if material_map_text:
+            material_map = Path(material_map_text).expanduser()
+            if not material_map.is_file():
+                messagebox.showerror(APP_TITLE, "Choose an existing material mapping JSON, or leave it blank.")
+                return
+            command.extend(["--material-map", str(material_map)])
         materials = Path(self.materials_root.get()).expanduser() if self.materials_root.get().strip() else None
         if materials is not None:
             if not materials.is_dir():
@@ -220,6 +237,7 @@ class ConverterApp:
         self.append_log(f"Output: {output}")
         self.append_log(f"Report: {report}")
         self.append_log(f"Materials: {materials if materials else 'not selected'}")
+        self.append_log(f"Material map: {material_map_text if material_map_text else 'not selected'}")
         self.append_log("-" * 60)
 
         self.worker = threading.Thread(target=self.run_process, args=(command, folder), daemon=True)

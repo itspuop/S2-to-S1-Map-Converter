@@ -4,7 +4,7 @@ Progress is printed as meshes are processed. The VMF is created early and append
 incrementally, so a large map does not leave the user waiting without feedback.
 """
 from __future__ import annotations
-import argparse, json, sys, time
+import argparse, json, sys, time, re
 from pathlib import Path
 
 from s2css.dmx_binary import DMXError, parse_binary_v9
@@ -101,7 +101,46 @@ def _material_diagnostics(elements: list[dict], mesh_attrs: dict) -> dict:
     }
 
 
-def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | None = None) -> dict:
+
+def _scan_source2_materials(elements: list[dict], materials_root: Path | None) -> dict:
+    """Report referenced VMAT files and likely texture parameters; does not convert assets."""
+    refs = set()
+    for element in elements:
+        attrs = element.get("attributes", {}) if isinstance(element, dict) else {}
+        values = attrs.get("materials", [])
+        if isinstance(values, list):
+            for value in values:
+                if isinstance(value, str) and value.lower().endswith(".vmat"):
+                    refs.add(value.replace("\\", "/").lstrip("/"))
+    report = {"materials_root": str(materials_root) if materials_root else None,
+              "referenced_vmat_count": len(refs), "materials": []}
+    if not materials_root:
+        report["note"] = "No materials folder selected."
+        return report
+    for ref in sorted(refs):
+        rel = ref[len("materials/"):] if ref.lower().startswith("materials/") else ref
+        path = materials_root / Path(rel)
+        item = {"vmat_path": ref, "resolved_file": str(path), "exists": path.is_file()}
+        if path.is_file():
+            try:
+                content = path.read_text(encoding="utf-8-sig", errors="replace")
+                shader = re.search(r'"(?:shader|m_shaderName)"\s+"([^"]+)"', content, re.I)
+                if shader:
+                    item["shader"] = shader.group(1)
+                candidates = []
+                for line in content.splitlines():
+                    low = line.lower()
+                    if any(word in low for word in ("texture", "albedo", "basecolor", "base_color", "normal", "roughness", "metalness")):
+                        if '"' in line:
+                            candidates.append(line.strip())
+                item["texture_parameter_candidates"] = candidates
+            except OSError as exc:
+                item["read_error"] = str(exc)
+        report["materials"].append(item)
+    report["note"] = "Diagnostic scan only. VMAT/VTexture conversion to VMT/VTF is not implemented yet."
+    return report
+
+def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | None = None, materials_root: Path | None = None) -> dict:
     started = time.monotonic()
     print(f"[1/3] Parsing editable VMAP: {vmap_path}", flush=True)
     graph = parse_binary_v9(vmap_path, include_binary=False)
@@ -109,6 +148,8 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
     elements = graph.get("elements", [])
     mesh_nodes = [(i, n) for i, n in enumerate(elements) if n.get("type") == "CMapMesh"]
     total = len(mesh_nodes)
+    material_scan = _scan_source2_materials(elements, materials_root)
+    print(f"Material scan: {material_scan['referenced_vmat_count']} referenced VMAT path(s).", flush=True)
     meshdata_users = {}
     for mesh_i, mesh_node in mesh_nodes:
         mesh_ref = mesh_node.get("attributes", {}).get("meshData")
@@ -262,6 +303,7 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
                         "exported_brush_count": exported, "skipped_mesh_count": skipped,
                         "complete": ordinal == total,
                         "material_policy": "All exported faces use TOOLS/TOOLSNODRAW; Source 2 VMAT translation is not implemented.",
+                        "material_scan": material_scan,
                         "meshes": results,
                     }
                     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -276,6 +318,7 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
         "complete": True,
         "elapsed_seconds": round(time.monotonic() - started, 2),
         "material_policy": "All exported faces use TOOLS/TOOLSNODRAW; Source 2 VMAT translation is not implemented.",
+        "material_scan": material_scan,
         "meshes": results,
     }
     if report_path:
@@ -290,13 +333,16 @@ def main(argv=None) -> int:
     parser.add_argument("vmap", type=Path, help="Editable binary-DMX .vmap, not .vmap_c")
     parser.add_argument("--output", type=Path, help="Output VMF (default: <map>_brushes.vmf)")
     parser.add_argument("--report", type=Path, help="Optional JSON report listing exported and skipped meshes")
+    parser.add_argument("--materials-root", type=Path, help="Addon materials folder")
     args = parser.parse_args(argv)
     if not args.vmap.is_file():
         parser.error(f"VMAP file not found: {args.vmap}")
+    if args.materials_root is not None and not args.materials_root.is_dir():
+        parser.error(f"Materials folder not found: {args.materials_root}")
     output = args.output or args.vmap.with_name(args.vmap.stem + "_brushes.vmf")
     report = args.report or output.with_name(output.stem + "_report.json")
     try:
-        result = export_vmap_to_vmf(args.vmap, output, report)
+        result = export_vmap_to_vmf(args.vmap, output, report, args.materials_root)
     except (OSError, DMXError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr, flush=True)
         return 1

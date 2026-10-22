@@ -69,6 +69,11 @@ def _material_diagnostics(elements: list[dict], mesh_attrs: dict) -> dict:
         key: value for key, value in mesh_attrs.items()
         if any(token in key.lower().replace("_", "") for token in material_keys)
     }
+    assignment_candidates = {
+        key: value for key, value in mesh_attrs.items()
+        if "face" in key.lower() and "material" in key.lower()
+        or "material" in key.lower() and any(token in key.lower() for token in ("index", "indices", "slot", "id"))
+    }
     materials = mesh_attrs.get("materials", [])
     resolved_materials = []
     if isinstance(materials, list):
@@ -98,12 +103,14 @@ def _material_diagnostics(elements: list[dict], mesh_attrs: dict) -> dict:
         "source2_materials": materials,
         "resolved_material_elements": resolved_materials,
         "material_related_mesh_attributes": related,
+        "mesh_attribute_keys": sorted(mesh_attrs.keys()),
+        "possible_face_material_assignments": assignment_candidates,
     }
 
 
 
 def _scan_source2_materials(elements: list[dict], materials_root: Path | None) -> dict:
-    """Report referenced VMAT files and likely texture parameters; does not convert assets."""
+    """Report VMAT and texture availability in addon/shared asset roots; no conversion."""
     refs = set()
     for element in elements:
         attrs = element.get("attributes", {}) if isinstance(element, dict) else {}
@@ -112,32 +119,90 @@ def _scan_source2_materials(elements: list[dict], materials_root: Path | None) -
             for value in values:
                 if isinstance(value, str) and value.lower().endswith(".vmat"):
                     refs.add(value.replace("\\", "/").lstrip("/"))
-    report = {"materials_root": str(materials_root) if materials_root else None,
-              "referenced_vmat_count": len(refs), "materials": []}
+
+    report = {
+        "materials_root": str(materials_root) if materials_root else None,
+        "referenced_vmat_count": len(refs),
+        "materials": [],
+        "texture_roots": [],
+    }
     if not materials_root:
         report["note"] = "No materials folder selected."
         return report
+
+    # Build likely roots only from the selected path. Include them only when present;
+    # never assume the user's install layout or search the entire drive.
+    roots = [("selected_addon_content", materials_root)]
+    parts_lower = [part.lower() for part in materials_root.parts]
+    content_index = next((i for i in range(len(parts_lower) - 1, -1, -1) if parts_lower[i] == "content"), None)
+    if content_index is not None:
+        content_root = Path(*materials_root.parts[:content_index + 1])
+        game_root = Path(*materials_root.parts[:content_index], "game")
+        candidates = [
+            ("addon_game", game_root.joinpath(*materials_root.parts[content_index + 1:])),
+            ("shared_content", content_root / "csgo" / "materials"),
+            ("shared_game", game_root / "csgo" / "materials"),
+        ]
+        seen = {str(path).casefold() for _, path in roots}
+        for label, path in candidates:
+            if path.is_dir() and str(path).casefold() not in seen:
+                roots.append((label, path))
+                seen.add(str(path).casefold())
+    report["texture_roots"] = [{"label": label, "path": str(path), "exists": path.is_dir()} for label, path in roots]
+
+    def asset_candidates(asset_ref: str, suffix: str | None = None) -> list[dict]:
+        normalized = asset_ref.replace("\\", "/").strip().lstrip("/")
+        if normalized.lower().startswith("materials/"):
+            normalized = normalized[len("materials/"):]
+        if suffix:
+            normalized = str(Path(normalized).with_suffix(suffix))
+        matches = []
+        for label, root in roots:
+            candidate = root / Path(normalized)
+            if candidate.is_file():
+                matches.append({"root": label, "path": str(candidate)})
+        return matches
+
+    texture_pattern = re.compile(r'"([^"]+\.(?:tga|png|jpg|jpeg|psd|vtf|vtex|mks))"', re.I)
     for ref in sorted(refs):
-        rel = ref[len("materials/"):] if ref.lower().startswith("materials/") else ref
-        path = materials_root / Path(rel)
-        item = {"vmat_path": ref, "resolved_file": str(path), "exists": path.is_file()}
-        if path.is_file():
+        normalized = ref[len("materials/"):] if ref.lower().startswith("materials/") else ref
+        vmat_matches = asset_candidates(ref)
+        item = {
+            "vmat_path": ref,
+            "resolved_file": str(materials_root / Path(normalized)),
+            "exists": bool(vmat_matches),
+            "found_in": vmat_matches,
+        }
+        source_path = next((Path(match["path"]) for match in vmat_matches if Path(match["path"]).suffix.lower() == ".vmat"), None)
+        if source_path:
             try:
-                content = path.read_text(encoding="utf-8-sig", errors="replace")
+                content = source_path.read_text(encoding="utf-8-sig", errors="replace")
                 shader = re.search(r'"(?:shader|m_shaderName)"\s+"([^"]+)"', content, re.I)
                 if shader:
                     item["shader"] = shader.group(1)
-                candidates = []
-                for line in content.splitlines():
-                    low = line.lower()
-                    if any(word in low for word in ("texture", "albedo", "basecolor", "base_color", "normal", "roughness", "metalness")):
-                        if '"' in line:
-                            candidates.append(line.strip())
-                item["texture_parameter_candidates"] = candidates
+                texture_refs = []
+                for match in texture_pattern.finditer(content):
+                    texture_ref = match.group(1).replace("\\", "/")
+                    if texture_ref.lower().startswith("materials/") and texture_ref.lower().endswith(".mks"):
+                        continue
+                    if texture_ref.lower().endswith((".tga", ".png", ".jpg", ".jpeg", ".psd", ".vtf", ".vtex")):
+                        texture_refs.append(texture_ref)
+                # Preserve order while removing duplicate references.
+                texture_refs = list(dict.fromkeys(texture_refs))
+                item["textures"] = [
+                    {"texture_path": texture_ref,
+                     "found_in": asset_candidates(texture_ref),
+                     "exists": bool(asset_candidates(texture_ref))}
+                    for texture_ref in texture_refs
+                ]
+                item["texture_reference_count"] = len(texture_refs)
             except OSError as exc:
                 item["read_error"] = str(exc)
         report["materials"].append(item)
-    report["note"] = "Diagnostic scan only. VMAT/VTexture conversion to VMT/VTF is not implemented yet."
+    report["note"] = (
+        "Availability scan only. VMAT/VTexture conversion to VMT/VTF is not implemented. "
+        "Material-slot presence does not establish which material belongs to each face."
+    )
     return report
 
 def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | None = None, materials_root: Path | None = None) -> dict:

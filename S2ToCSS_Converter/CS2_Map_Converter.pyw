@@ -38,6 +38,7 @@ class ConverterApp:
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.worker: threading.Thread | None = None
         self.process: subprocess.Popen[str] | None = None
+        self.current_task = "conversion"
 
         default_dir = Path(__file__).resolve().parent
         self.converter_dir = tk.StringVar(value=str(default_dir))
@@ -186,6 +187,7 @@ class ConverterApp:
             messagebox.showerror(APP_TITLE, "Choose valid files and folders for material recovery.")
             return
         command = [python_executable(), str(script), "--report", str(report), "--game-root", str(game_root), "--source2viewer-cli", str(cli), "--vtfcmd", str(vtfcmd), "--output-materials", str(output_materials)]
+        self.current_task = "recovery"
         self.start_button.configure(state="disabled")
         self.recover_button.configure(state="disabled")
         self.progress.start(10)
@@ -291,6 +293,7 @@ class ConverterApp:
                 messagebox.showerror(APP_TITLE, "Choose an existing addon materials folder, or leave it blank.")
                 return
             command.extend(["--materials-root", str(materials)])
+        self.current_task = "conversion"
         self.start_button.configure(state="disabled")
         self.progress.start(10)
         self.status.set("Converting… progress and errors will appear below.")
@@ -339,14 +342,22 @@ class ConverterApp:
                     self.recover_button.configure(state="normal")
                     self.process = None
                     if code == 0:
-                        self.status.set("Finished successfully.")
-                        self.append_log("Conversion completed successfully.")
-                        if self.open_output.get():
-                            os.startfile(str(Path(self.output_file.get()).parent))
-                        messagebox.showinfo(
-                            APP_TITLE,
-                            "Conversion completed successfully.\n\nYour VMF and JSON report are ready.",
-                        )
+                        if self.current_task == "recovery":
+                            self.status.set("Material recovery finished.")
+                            self.append_log("Material recovery completed. Review the recovery report, then select s2_material_map.json in the Material map JSON field before converting again.")
+                            messagebox.showinfo(
+                                APP_TITLE,
+                                "Material recovery finished.\\n\\nReview the recovery report, then select s2_material_map.json in the Material map JSON field and run conversion again.",
+                            )
+                        else:
+                            self.status.set("Finished successfully.")
+                            self.append_log("Conversion completed successfully.")
+                            if self.open_output.get():
+                                os.startfile(str(Path(self.output_file.get()).parent))
+                            messagebox.showinfo(
+                                APP_TITLE,
+                                "Conversion completed successfully.\\n\\nYour VMF and JSON report are ready.",
+                            )
                     else:
                         self.status.set(f"Conversion failed (exit code {code}). See the log.")
                         self.append_log(f"Conversion failed with exit code {code}.")

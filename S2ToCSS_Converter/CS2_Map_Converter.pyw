@@ -44,6 +44,7 @@ class ConverterApp:
         self.input_file = tk.StringVar()
         self.output_file = tk.StringVar()
         self.report_file = tk.StringVar()
+        self.materials_root = tk.StringVar()
         self.status = tk.StringVar(value="Ready — choose an editable .vmap file.")
         self.open_output = tk.BooleanVar(value=False)
 
@@ -60,6 +61,7 @@ class ConverterApp:
 
         self.path_row(outer, "Converter folder", self.converter_dir, self.pick_converter, "Browse…")
         self.path_row(outer, "Input .vmap", self.input_file, self.pick_input, "Choose map…")
+        self.path_row(outer, "Materials folder", self.materials_root, self.pick_materials, "Choose folder…")
         self.path_row(outer, "Output .vmf", self.output_file, self.pick_output, "Save as…")
         self.path_row(outer, "JSON report", self.report_file, self.pick_report, "Save as…")
 
@@ -113,6 +115,16 @@ class ConverterApp:
             source = Path(path)
             self.output_file.set(str(source.with_name(source.stem + "_brushes.vmf")))
             self.report_file.set(str(source.with_name(source.stem + "_brushes_report.json")))
+            # Typical editable addon layout: maps and materials are sibling folders.
+            addon_root = source.parent.parent
+            candidate = addon_root / "materials"
+            if candidate.is_dir():
+                self.materials_root.set(str(candidate))
+
+    def pick_materials(self):
+        path = filedialog.askdirectory(title="Choose addon materials folder (the folder containing dev, etc.)")
+        if path:
+            self.materials_root.set(path)
 
     def pick_output(self):
         path = filedialog.asksaveasfilename(
@@ -194,6 +206,12 @@ class ConverterApp:
             python_executable(), str(script), str(source),
             "--output", str(output), "--report", str(report),
         ]
+        materials = Path(self.materials_root.get()).expanduser() if self.materials_root.get().strip() else None
+        if materials is not None:
+            if not materials.is_dir():
+                messagebox.showerror(APP_TITLE, "Choose an existing addon materials folder, or leave it blank.")
+                return
+            command.extend(["--materials-root", str(materials)])
         self.start_button.configure(state="disabled")
         self.progress.start(10)
         self.status.set("Converting… progress and errors will appear below.")
@@ -201,6 +219,7 @@ class ConverterApp:
         self.append_log(f"Input:  {source}")
         self.append_log(f"Output: {output}")
         self.append_log(f"Report: {report}")
+        self.append_log(f"Materials: {materials if materials else 'not selected'}")
         self.append_log("-" * 60)
 
         self.worker = threading.Thread(target=self.run_process, args=(command, folder), daemon=True)

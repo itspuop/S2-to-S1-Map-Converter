@@ -267,10 +267,30 @@ def _scan_source2_materials(
             continue
         mesh_attrs = elements[mesh_index].get("attributes", {})
         values = mesh_attrs.get("materials", [])
+
+        def collect_vmat_paths(value) -> None:
+            if isinstance(value, str):
+                normalized = value.replace("\\\\", "/").replace("\\", "/").strip().lstrip("/")
+                if normalized.lower().endswith(".vmat"):
+                    refs.add(normalized)
+            elif isinstance(value, dict):
+                for nested in value.values():
+                    collect_vmat_paths(nested)
+            elif isinstance(value, list):
+                for nested in value:
+                    collect_vmat_paths(nested)
+
         if isinstance(values, list):
             for value in values:
-                if isinstance(value, str) and value.lower().endswith(".vmat"):
-                    refs.add(value.replace("\\\\", "/").replace("\\", "/").lstrip("/"))
+                # Depending on the DMX layout, each material slot is either a
+                # direct path or a reference to a separate material element.
+                collect_vmat_paths(value)
+                if isinstance(value, dict):
+                    material_index = value.get("element_index")
+                    if isinstance(material_index, int) and 0 <= material_index < len(elements):
+                        material_element = elements[material_index]
+                        collect_vmat_paths(material_element.get("name", ""))
+                        collect_vmat_paths(material_element.get("attributes", {}))
 
     report = {
         "materials_root": str(materials_root) if materials_root else None,

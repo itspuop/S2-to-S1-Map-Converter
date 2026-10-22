@@ -62,6 +62,45 @@ def _geometry_metrics(vertices, faces) -> dict:
     }
 
 
+def _material_diagnostics(elements: list[dict], mesh_attrs: dict) -> dict:
+    """Capture Source 2 material references and per-face material fields for later mapping."""
+    material_keys = ("material", "texture", "vmat", "shader", "albedo", "basecolor", "base_color")
+    related = {
+        key: value for key, value in mesh_attrs.items()
+        if any(token in key.lower().replace("_", "") for token in material_keys)
+    }
+    materials = mesh_attrs.get("materials", [])
+    resolved_materials = []
+    if isinstance(materials, list):
+        for value in materials:
+            if isinstance(value, dict) and isinstance(value.get("element_index"), int):
+                index = value["element_index"]
+                if 0 <= index < len(elements):
+                    element = elements[index]
+                    attrs = element.get("attributes", {})
+                    relevant_attrs = {
+                        key: val for key, val in attrs.items()
+                        if any(token in key.lower().replace("_", "") for token in material_keys)
+                        or key.lower() in ("name", "path", "materialname", "materialpath")
+                    }
+                    resolved_materials.append({
+                        "element_index": index,
+                        "type": element.get("type"),
+                        "name": element.get("name"),
+                        "guid": element.get("guid"),
+                        "relevant_attributes": relevant_attrs,
+                    })
+                else:
+                    resolved_materials.append({"element_index": index, "error": "reference out of range"})
+            else:
+                resolved_materials.append(value)
+    return {
+        "source2_materials": materials,
+        "resolved_material_elements": resolved_materials,
+        "material_related_mesh_attributes": related,
+    }
+
+
 def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | None = None) -> dict:
     started = time.monotonic()
     print(f"[1/3] Parsing editable VMAP: {vmap_path}", flush=True)
@@ -105,6 +144,7 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
             item["meshData_shared_by_CMapMesh_elements"] = meshdata_users.get(mesh_index, []) if isinstance(mesh_index, int) else []
             mesh_attrs = elements[mesh_index].get("attributes", {}) if isinstance(mesh_index, int) and 0 <= mesh_index < len(elements) else {}
             item["vertexData_index"] = mesh_attrs.get("vertexData", {}).get("element_index") if isinstance(mesh_attrs.get("vertexData"), dict) else None
+            item.update(_material_diagnostics(elements, mesh_attrs))
             edge_count = len(mesh_attrs.get("edgeNextIndices", [])) if isinstance(mesh_attrs.get("edgeNextIndices"), list) else 0
             face_count = len(mesh_attrs.get("faceEdgeIndices", [])) if isinstance(mesh_attrs.get("faceEdgeIndices"), list) else 0
             # Announce the current mesh before decoding, so a single expensive mesh is visible.

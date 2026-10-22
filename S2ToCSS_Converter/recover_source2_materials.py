@@ -16,7 +16,8 @@ from pathlib import Path
 
 
 def run_cli(command: list[str], label: str) -> None:
-    print(f"[{label}] {' '.join(f'\"{part}\"' if ' ' in part else part for part in command)}", flush=True)
+    display_command = " ".join(('"' + part + '"') if " " in part else part for part in command)
+    print(f"[{label}] {display_command}", flush=True)
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, encoding="utf-8", errors="replace")
     if result.stdout:

@@ -55,6 +55,58 @@ def resource_filter(path: str, extension: str) -> str:
     return "materials/" + str(Path(clean).with_suffix("." + extension)).replace("\\", "/")
 
 
+def extract_referenced_resources(
+    cli: Path,
+    game_root: Path,
+    refs: list[str],
+    extension: str,
+    output: Path,
+    label: str,
+) -> None:
+    """Extract exact referenced resources from root-level game VPKs only.
+
+    Do not pass the whole game folder to Source2Viewer with --recursive_vpk:
+    that makes it enumerate VPKs inside map folders as well. Editable-map
+    resources should be resolved from the report/loose addon files first; this
+    fallback checks only the shared game VPKs directly inside game_root.
+    """
+    archives = sorted(game_root.glob("*_dir.vpk"))
+    if not archives:
+        print(
+            f"No root-level *_dir.vpk archives found in {game_root}; "
+            "skipping shared-VPK extraction rather than recursively scanning map folders.",
+            flush=True,
+        )
+        return
+
+    filters = list(dict.fromkeys(resource_filter(ref, extension) for ref in refs))
+    # Keep the command line comfortably below Windows' command-length limit.
+    batches: list[list[str]] = []
+    batch: list[str] = []
+    batch_chars = 0
+    for item in filters:
+        extra = len(item) + (1 if batch else 0)
+        if batch and batch_chars + extra > 7000:
+            batches.append(batch)
+            batch = []
+            batch_chars = 0
+            extra = len(item)
+        batch.append(item)
+        batch_chars += extra
+    if batch:
+        batches.append(batch)
+
+    for archive in archives:
+        for batch in batches:
+            run_cli([
+                str(cli), "-i", str(archive),
+                "--vpk_extensions", extension,
+                "--vpk_filepath", ",".join(batch),
+                "--vpk_decompile",
+                "-o", str(output),
+            ], f"{label} ({archive.name})")
+
+
 def find_exported(root: Path, relative_stem: str, suffixes: tuple[str, ...]) -> Path | None:
     rel = Path(relative_stem)
     candidates = [root / rel.with_suffix(suffix) for suffix in suffixes]
@@ -128,16 +180,14 @@ def main(argv: list[str] | None = None) -> int:
     extracted_textures.mkdir(parents=True, exist_ok=True)
     args.output_materials.mkdir(parents=True, exist_ok=True)
 
-    # Filter only the referenced materials rather than dumping every game asset.
+    # Only inspect referenced VMATs in shared game VPKs located directly
+    # under game_root; never recurse into each map's own VPK/material folders.
     vpk_material_refs = [ref for ref in refs if ref not in loose_materials]
     if vpk_material_refs:
-        material_filters = ",".join(resource_filter(ref, "vmat_c") for ref in vpk_material_refs)
-        run_cli([
-            str(args.source2viewer_cli), "-i", str(args.game_root),
-            "--recursive", "--recursive_vpk", "--vpk_extensions", "vmat_c",
-            "--vpk_filepath", material_filters, "--vpk_decompile",
-            "-o", str(extracted_materials),
-        ], "Source 2 material extraction")
+        extract_referenced_resources(
+            args.source2viewer_cli, args.game_root, vpk_material_refs,
+            "vmat_c", extracted_materials, "Source 2 material extraction",
+        )
 
     material_records = []
     texture_refs: list[tuple[str, str, str, Path]] = []
@@ -165,13 +215,10 @@ def main(argv: list[str] | None = None) -> int:
 
     unique_textures = sorted({path for _, _, path, _ in texture_refs})
     if unique_textures:
-        texture_filters = ",".join(resource_filter(path, "vtex_c") for path in unique_textures)
-        run_cli([
-            str(args.source2viewer_cli), "-i", str(args.game_root),
-            "--recursive", "--recursive_vpk", "--vpk_extensions", "vtex_c",
-            "--vpk_filepath", texture_filters, "--vpk_decompile",
-            "-o", str(extracted_textures),
-        ], "Source 2 texture extraction")
+        extract_referenced_resources(
+            args.source2viewer_cli, args.game_root, unique_textures,
+            "vtex_c", extracted_textures, "Source 2 texture extraction",
+        )
 
     converted: dict[str, str] = {}
     for texture_ref in unique_textures:

@@ -219,12 +219,41 @@ def _face_material_assignments(elements: list[dict], mesh_attrs: dict, face_coun
         source_path = None
         if slot is not None and 0 <= slot < len(source_materials):
             value = source_materials[slot]
-            if isinstance(value, str):
-                source_path = value.replace("\\", "/").lstrip("/")
+
+            def collect_material_paths(item, output: list[str]) -> None:
+                if isinstance(item, str):
+                    candidate = item.replace("\\\\", "/").replace("\\", "/").strip().lstrip("/")
+                    if candidate.lower().endswith(".vmat"):
+                        output.append(candidate)
+                elif isinstance(item, dict):
+                    for nested in item.values():
+                        collect_material_paths(nested, output)
+                elif isinstance(item, list):
+                    for nested in item:
+                        collect_material_paths(nested, output)
+
+            candidates: list[str] = []
+            collect_material_paths(value, candidates)
+            # DMX material slots often reference a separate element instead of
+            # storing the VMAT path directly in the slot array.
+            if isinstance(value, dict) and isinstance(value.get("element_index"), int):
+                material_index = value["element_index"]
+                if 0 <= material_index < len(elements):
+                    material_element = elements[material_index]
+                    collect_material_paths(material_element.get("name", ""), candidates)
+                    collect_material_paths(material_element.get("attributes", {}), candidates)
+            if candidates:
+                source_path = candidates[0]
         normalized = (source_path or "").lower()
         mapped_material = None
         if source_path and isinstance(material_map, dict):
-            mapped_material = material_map.get(source_path) or material_map.get(source_path.lower())
+            normalized_key = source_path.replace("\\\\", "/").replace("\\", "/").lstrip("/")
+            mapped_material = (
+                material_map.get(source_path)
+                or material_map.get(source_path.lower())
+                or material_map.get(normalized_key)
+                or material_map.get(normalized_key.lower())
+            )
         if isinstance(mapped_material, str) and mapped_material.strip():
             source1_material = mapped_material.strip().replace("\\\\", "/").replace("\\", "/").removesuffix(".vmt")
             mapping = "generated_source1_material_map"

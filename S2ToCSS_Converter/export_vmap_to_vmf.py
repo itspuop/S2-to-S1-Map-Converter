@@ -99,12 +99,45 @@ def _material_diagnostics(elements: list[dict], mesh_attrs: dict) -> dict:
                     resolved_materials.append({"element_index": index, "error": "reference out of range"})
             else:
                 resolved_materials.append(value)
+    # Inspect referenced topology/data elements without changing export behavior.
+    # Per-face assignments may live in a referenced face-data element rather than on
+    # the top-level polygon-mesh attributes.
+    topology_data_diagnostics = {}
+    for key in ("faceData", "subdivisionData", "edgeData", "vertexData"):
+        value = mesh_attrs.get(key)
+        refs = value if isinstance(value, list) else [value]
+        resolved = []
+        for ref in refs:
+            if not (isinstance(ref, dict) and isinstance(ref.get("element_index"), int)):
+                continue
+            index = ref["element_index"]
+            if not (0 <= index < len(elements)):
+                resolved.append({"element_index": index, "error": "reference out of range"})
+                continue
+            element = elements[index]
+            attrs = element.get("attributes", {})
+            interesting = {
+                attr_key: attr_value for attr_key, attr_value in attrs.items()
+                if any(token in attr_key.lower().replace("_", "") for token in
+                       ("material", "face", "slot", "index", "texture", "vmat", "shader"))
+            }
+            resolved.append({
+                "element_index": index,
+                "type": element.get("type"),
+                "name": element.get("name"),
+                "attribute_keys": sorted(attrs.keys()),
+                "material_or_face_related_attributes": interesting,
+            })
+        if resolved:
+            topology_data_diagnostics[key] = resolved
+
     return {
         "source2_materials": materials,
         "resolved_material_elements": resolved_materials,
         "material_related_mesh_attributes": related,
         "mesh_attribute_keys": sorted(mesh_attrs.keys()),
         "possible_face_material_assignments": assignment_candidates,
+        "referenced_topology_data_diagnostics": topology_data_diagnostics,
     }
 
 

@@ -220,7 +220,7 @@ def _face_material_assignments(elements: list[dict], mesh_attrs: dict, face_coun
         if slot is not None and 0 <= slot < len(source_materials):
             value = source_materials[slot]
             if isinstance(value, str):
-                source_path = value.replace("\\\\", "/").lstrip("/")
+                source_path = value.replace("\\", "/").lstrip("/")
         normalized = (source_path or "").lower()
         # Only map tool materials whose Source 1 equivalents are sufficiently clear.
         if normalized.endswith("materials/tools/toolsinvisible.vmat") or normalized.endswith("materials/tools/toolsnodraw.vmat"):

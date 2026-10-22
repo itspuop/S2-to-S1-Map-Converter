@@ -1,6 +1,6 @@
 # Windows GUI for the experimental VMF exporter
 
-This GUI is a launcher for `export_vmap_to_vmf.py`. It does not replace the exporter or add new conversion features.
+This GUI launches `export_vmap_to_vmf.py` for geometry conversion and includes an experimental optional workflow for recovering Source 2 materials into basic Source 1 VMT/VTF assets.
 
 ## How to use it
 

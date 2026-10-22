@@ -74,7 +74,7 @@ def extract_referenced_resources(
     # Search only the supplied root and known shared-content directories;
     # never recurse into addon/map folders.
     archive_dirs = [game_root, game_root / "csgo", game_root / "core",
-                    game_root / "platform", game_root / "panorama"]
+                    game_root / "platform"]
     archives = sorted({p.resolve() for folder in archive_dirs if folder.is_dir()
                        for p in folder.glob("*_dir.vpk")})
     if not archives:

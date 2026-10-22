@@ -26,19 +26,26 @@ def run_cli(command: list[str], label: str) -> None:
         raise RuntimeError(f"{label} failed with exit code {result.returncode}.")
 
 
-def read_report(path: Path) -> list[str]:
+def read_report(path: Path) -> tuple[list[str], dict[str, Path]]:
     data = json.loads(path.read_text(encoding="utf-8-sig"))
     refs = set()
+    loose_materials: dict[str, Path] = {}
     for item in data.get("material_scan", {}).get("materials", []):
         ref = item.get("vmat_path")
         if isinstance(ref, str) and ref.lower().endswith(".vmat"):
-            refs.add(ref.replace("\\", "/").lstrip("/"))
+            normalized = ref.replace("\\", "/").lstrip("/")
+            refs.add(normalized)
+            for match in item.get("found_in", []):
+                candidate = Path(match.get("path", "")) if isinstance(match, dict) else None
+                if candidate and candidate.is_file() and candidate.suffix.lower() == ".vmat":
+                    loose_materials[normalized] = candidate
+                    break
     for mesh in data.get("meshes", []):
         for assignment in mesh.get("face_material_assignments", []):
             ref = assignment.get("source2_material")
             if isinstance(ref, str) and ref.lower().endswith(".vmat"):
                 refs.add(ref.replace("\\", "/").lstrip("/"))
-    return sorted(refs)
+    return sorted(refs), loose_materials
 
 
 def resource_filter(path: str, extension: str) -> str:
@@ -109,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.game_root.is_dir():
         parser.error(f"CS2 game root must be a folder: {args.game_root}")
 
-    refs = read_report(args.report)
+    refs, loose_materials = read_report(args.report)
     if not refs:
         print("No referenced .vmat paths were found in the report.", flush=True)
         return 0
@@ -122,20 +129,22 @@ def main(argv: list[str] | None = None) -> int:
     args.output_materials.mkdir(parents=True, exist_ok=True)
 
     # Filter only the referenced materials rather than dumping every game asset.
-    material_filters = ",".join(resource_filter(ref, "vmat_c") for ref in refs)
-    run_cli([
-        str(args.source2viewer_cli), "-i", str(args.game_root),
-        "--recursive", "--recursive_vpk", "--vpk_extensions", "vmat_c",
-        "--vpk_filepath", material_filters, "--vpk_decompile",
-        "-o", str(extracted_materials),
-    ], "Source 2 material extraction")
+    vpk_material_refs = [ref for ref in refs if ref not in loose_materials]
+    if vpk_material_refs:
+        material_filters = ",".join(resource_filter(ref, "vmat_c") for ref in vpk_material_refs)
+        run_cli([
+            str(args.source2viewer_cli), "-i", str(args.game_root),
+            "--recursive", "--recursive_vpk", "--vpk_extensions", "vmat_c",
+            "--vpk_filepath", material_filters, "--vpk_decompile",
+            "-o", str(extracted_materials),
+        ], "Source 2 material extraction")
 
     material_records = []
     texture_refs: list[tuple[str, str, str, Path]] = []
     for ref in refs:
         relative = ref[len("materials/"):] if ref.lower().startswith("materials/") else ref
         stem = str(Path(relative).with_suffix(""))
-        vmat_file = find_exported(extracted_materials, stem, (".vmat",))
+        vmat_file = loose_materials.get(ref) or find_exported(extracted_materials, stem, (".vmat",))
         if vmat_file is None:
             print(f"NOT FOUND: {ref} (not found in scanned loose/VPK assets)", flush=True)
             material_records.append({"source2_material": ref, "status": "not_found"})

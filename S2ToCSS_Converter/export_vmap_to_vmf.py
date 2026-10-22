@@ -121,12 +121,43 @@ def _material_diagnostics(elements: list[dict], mesh_attrs: dict) -> dict:
                 if any(token in attr_key.lower().replace("_", "") for token in
                        ("material", "face", "slot", "index", "texture", "vmat", "shader"))
             }
+            # The actual per-face fields are commonly stored one level deeper in
+            # CDmePolygonMeshDataArray -> streams -> CDmePolygonMeshDataStream.
+            stream_diagnostics = []
+            stream_refs = attrs.get("streams", [])
+            if isinstance(stream_refs, list):
+                for stream_ref in stream_refs:
+                    if not (isinstance(stream_ref, dict) and isinstance(stream_ref.get("element_index"), int)):
+                        stream_diagnostics.append({"reference": stream_ref, "error": "not an element reference"})
+                        continue
+                    stream_index = stream_ref["element_index"]
+                    if not (0 <= stream_index < len(elements)):
+                        stream_diagnostics.append({"element_index": stream_index, "error": "reference out of range"})
+                        continue
+                    stream_element = elements[stream_index]
+                    stream_attrs = stream_element.get("attributes", {})
+                    stream_data = stream_attrs.get("data")
+                    stream_row = {
+                        "element_index": stream_index,
+                        "type": stream_element.get("type"),
+                        "name": stream_element.get("name"),
+                        "attribute_keys": sorted(stream_attrs.keys()),
+                        "stream_name": stream_attrs.get("name"),
+                        "semantic": stream_attrs.get("semantic"),
+                        "format": stream_attrs.get("format"),
+                        "data_type": type(stream_data).__name__,
+                        "data_length": len(stream_data) if isinstance(stream_data, list) else None,
+                    }
+                    if isinstance(stream_data, list):
+                        stream_row["first_values"] = stream_data[:16]
+                    stream_diagnostics.append(stream_row)
             resolved.append({
                 "element_index": index,
                 "type": element.get("type"),
                 "name": element.get("name"),
                 "attribute_keys": sorted(attrs.keys()),
                 "material_or_face_related_attributes": interesting,
+                "streams": stream_diagnostics,
             })
         if resolved:
             topology_data_diagnostics[key] = resolved

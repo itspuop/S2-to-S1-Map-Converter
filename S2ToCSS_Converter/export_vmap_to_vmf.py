@@ -173,6 +173,75 @@ def _material_diagnostics(elements: list[dict], mesh_attrs: dict) -> dict:
 
 
 
+
+def _face_material_assignments(elements: list[dict], mesh_attrs: dict, face_count: int) -> list[dict]:
+    """Resolve per-face Source 2 material slots and map only known-safe Source 1 equivalents."""
+    material_refs = mesh_attrs.get("materials", [])
+    source_materials = material_refs if isinstance(material_refs, list) else []
+    face_data_ref = mesh_attrs.get("faceData")
+    face_data_refs = face_data_ref if isinstance(face_data_ref, list) else [face_data_ref]
+    material_indices = None
+    for ref in face_data_refs:
+        if not (isinstance(ref, dict) and isinstance(ref.get("element_index"), int)):
+            continue
+        array_index = ref["element_index"]
+        if not (0 <= array_index < len(elements)):
+            continue
+        array_attrs = elements[array_index].get("attributes", {})
+        streams = array_attrs.get("streams", [])
+        if not isinstance(streams, list):
+            continue
+        for stream_ref in streams:
+            if not (isinstance(stream_ref, dict) and isinstance(stream_ref.get("element_index"), int)):
+                continue
+            stream_index = stream_ref["element_index"]
+            if not (0 <= stream_index < len(elements)):
+                continue
+            stream = elements[stream_index]
+            stream_name = str(stream.get("name", "")).lower()
+            if not stream_name.startswith("materialindex"):
+                continue
+            data = stream.get("attributes", {}).get("data")
+            if isinstance(data, list) and len(data) == face_count:
+                material_indices = data
+                break
+        if material_indices is not None:
+            break
+
+    assignments = []
+    for face_index in range(face_count):
+        slot = None
+        if material_indices is not None:
+            try:
+                slot = int(material_indices[face_index])
+            except (TypeError, ValueError):
+                slot = None
+        source_path = None
+        if slot is not None and 0 <= slot < len(source_materials):
+            value = source_materials[slot]
+            if isinstance(value, str):
+                source_path = value.replace("\\\\", "/").lstrip("/")
+        normalized = (source_path or "").lower()
+        # Only map tool materials whose Source 1 equivalents are sufficiently clear.
+        if normalized.endswith("materials/tools/toolsinvisible.vmat") or normalized.endswith("materials/tools/toolsnodraw.vmat"):
+            source1_material = "TOOLS/TOOLSNODRAW"
+            mapping = "known_tool_material_equivalent"
+        elif normalized.endswith("materials/tools/toolsskybox.vmat"):
+            source1_material = "TOOLS/TOOLSSKYBOX"
+            mapping = "known_tool_material_equivalent"
+        else:
+            source1_material = "TOOLS/TOOLSNODRAW"
+            mapping = "fallback_unmapped_source2_material" if source_path else "fallback_missing_face_material_assignment"
+        assignments.append({
+            "face_index": face_index,
+            "material_slot_index": slot,
+            "source2_material": source_path,
+            "source1_material": source1_material,
+            "mapping": mapping,
+        })
+    return assignments
+
+
 def _scan_source2_materials(elements: list[dict], materials_root: Path | None) -> dict:
     """Report VMAT and texture availability in addon/shared asset roots; no conversion."""
     refs = set()
@@ -317,6 +386,8 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
             item.update(_material_diagnostics(elements, mesh_attrs))
             edge_count = len(mesh_attrs.get("edgeNextIndices", [])) if isinstance(mesh_attrs.get("edgeNextIndices"), list) else 0
             face_count = len(mesh_attrs.get("faceEdgeIndices", [])) if isinstance(mesh_attrs.get("faceEdgeIndices"), list) else 0
+            face_material_assignments = _face_material_assignments(elements, mesh_attrs, face_count)
+            item["face_material_assignments"] = face_material_assignments
             # Announce the current mesh before decoding, so a single expensive mesh is visible.
             print(f"  Processing mesh {ordinal:,}/{total:,} (element {index}, edges {edge_count:,}, faces {face_count:,})...", flush=True)
             try:
@@ -403,9 +474,14 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
                     vmf.write(f' solid\n {{\n  "id" "{next_id}"\n')
                     next_id += 1
                     # Use the shared VMF plane writer; it corrects face winding for Source 1 brush planes.
-                    for face in faces:
+                    for face_index, face in enumerate(faces):
                         a, b, c = _plane_points(face, vertices, center)
-                        vmf.write(_vmf_side(next_id, a, b, c, "TOOLS/TOOLSNODRAW"))
+                        material = (
+                            face_material_assignments[face_index]["source1_material"]
+                            if face_index < len(face_material_assignments)
+                            else "TOOLS/TOOLSNODRAW"
+                        )
+                        vmf.write(_vmf_side(next_id, a, b, c, material))
                         next_id += 1
                     vmf.write('  editor\n  {\n   "color" "0 0 0"\n   "visgroupshown" "1"\n   "visgroupautoshown" "1"\n  }\n }\n')
                     vmf.flush()
@@ -431,7 +507,7 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
                         "cmapmesh_count": total, "processed_mesh_count": ordinal,
                         "exported_brush_count": exported, "skipped_mesh_count": skipped,
                         "complete": ordinal == total,
-                        "material_policy": "All exported faces use TOOLS/TOOLSNODRAW; Source 2 VMAT translation is not implemented.",
+                        "material_policy": "Per-face material slots are read from faceData materialindex streams. Known tool-material equivalents are mapped; other Source 2 materials safely fall back to TOOLS/TOOLSNODRAW because VMAT-to-VMT conversion is not implemented.",
                         "material_scan": material_scan,
                         "meshes": results,
                     }
@@ -479,7 +555,7 @@ def main(argv=None) -> int:
     print(f"Brushes exported: {result['exported_brush_count']} / {result['cmapmesh_count']} CMapMesh nodes", flush=True)
     print(f"Skipped for manual/unsupported handling: {result['skipped_mesh_count']}", flush=True)
     print(f"Mesh report: {report}", flush=True)
-    print("Exported faces use TOOLS/TOOLSNODRAW; inspect the VMF in Hammer before compiling.", flush=True)
+    print("Per-face material slots are applied where known; unmapped Source 2 materials fall back to TOOLS/TOOLSNODRAW. Inspect the VMF in Hammer.", flush=True)
     return 0
 
 

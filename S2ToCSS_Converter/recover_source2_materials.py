@@ -12,6 +12,7 @@ import json
 import re
 import subprocess
 import sys
+import shutil
 from pathlib import Path
 
 
@@ -265,16 +266,34 @@ def main(argv: list[str] | None = None) -> int:
             str(args.vtfcmd), "-file", str(image_path), "-output", str(target_file.parent),
             "-format", "dxt1", "-alphaformat", "dxt5", "-silent",
         ], "VTFCmd")
-        expected = target_file
-        if not expected.is_file():
-            # VTFCmd normally preserves the input stem; normalize into the requested relative path.
-            alternatives = list(target_file.parent.glob(image_path.stem + ".vtf"))
-            if alternatives:
-                expected = alternatives[0]
-        if expected.is_file():
-            converted[texture_ref] = str(target_relative.with_suffix("")).replace("\\", "/")
+        # VTFCmd writes using the input image's basename, which may differ
+        # from the Source 2 texture resource path. Find that output and place it
+        # at the exact path referenced by the generated VMT.
+        produced = target_file if target_file.is_file() else None
+        if produced is None:
+            candidate = target_file.parent / (image_path.stem + ".vtf")
+            if candidate.is_file():
+                produced = candidate
+        if produced is None:
+            # Some VTFCmd builds append/alter extensions or normalize case.
+            matches = [
+                p for p in target_file.parent.iterdir()
+                if p.is_file() and p.suffix.casefold() == ".vtf"
+                and p.stem.casefold() == image_path.stem.casefold()
+            ]
+            if len(matches) == 1:
+                produced = matches[0]
+        if produced is not None:
+            if produced.resolve() != target_file.resolve():
+                target_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(produced, target_file)
+            if target_file.is_file():
+                converted[texture_ref] = str(target_relative.with_suffix("")).replace("\\", "/")
+                print(f"VTF OK: {image_path.name} -> {target_file}", flush=True)
+            else:
+                print(f"VTF OUTPUT COULD NOT BE PLACED: {produced} -> {target_file}", flush=True)
         else:
-            print(f"VTF CONVERSION FAILED: {image_path}", flush=True)
+            print(f"VTF CONVERSION FAILED: no .vtf output found for {image_path}", flush=True)
 
     material_map: dict[str, str] = {}
     for record in material_records:

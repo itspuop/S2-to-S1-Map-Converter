@@ -132,7 +132,6 @@ def parse_texture_refs(vmat_text: str) -> list[tuple[str, str]]:
     # KV1 form: "g_tColor" "materials/foo.vtex"
     pairs = re.findall(r'"([^"]+)"\s+"([^"]+)"', vmat_text)
     # KV3 commonly uses: g_tColor = resource:"materials/foo.vtex"
-    # or g_tColor = "materials/foo.vtex". Capture assignments as well.
     pairs.extend(re.findall(
         r'([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(?:resource\s*:\s*)?"([^"]+)"',
         vmat_text, flags=re.I,
@@ -150,16 +149,15 @@ def parse_texture_refs(vmat_text: str) -> list[tuple[str, str]]:
             continue
         found.append((key, path))
 
-    # Some KV3 variants put resource references in a form not matched above.
-    # Recover remaining .vtex paths and infer the parameter from nearby text.
+    # Fallback for KV3 resource references that don't match the key/value patterns.
     for match in re.finditer(r'([^"\s]+\.vtex(?:_c)?)', vmat_text, re.I):
         value = match.group(1).rstrip('",;')
-        path = re.sub(r'\.vtex_c, '.vtex', value, flags=re.I)
+        path = re.sub(r"\.vtex_c$", ".vtex", value, flags=re.I)
         if not path.lower().startswith("materials/"):
             continue
         prefix = vmat_text[max(0, match.start() - 180):match.start()]
         key_match = re.search(
-            r'([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(?:resource\s*:\s*)?,
+            r'([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(?:resource\s*:\s*)?$',
             prefix,
             re.I,
         )
@@ -167,7 +165,6 @@ def parse_texture_refs(vmat_text: str) -> list[tuple[str, str]]:
         found.append((key, path))
 
     return list(dict.fromkeys(found))
-
 
 def choose_color_texture(refs: list[tuple[str, str]]) -> str | None:
     if not refs:

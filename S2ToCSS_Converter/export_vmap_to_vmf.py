@@ -174,8 +174,8 @@ def _material_diagnostics(elements: list[dict], mesh_attrs: dict) -> dict:
 
 
 
-def _face_material_assignments(elements: list[dict], mesh_attrs: dict, face_count: int) -> list[dict]:
-    """Resolve per-face Source 2 material slots and map only known-safe Source 1 equivalents."""
+def _face_material_assignments(elements: list[dict], mesh_attrs: dict, face_count: int, material_map: dict[str, str] | None = None) -> list[dict]:
+    """Resolve per-face Source 2 slots, applying generated Source 1 mappings when available."""
     material_refs = mesh_attrs.get("materials", [])
     source_materials = material_refs if isinstance(material_refs, list) else []
     face_data_ref = mesh_attrs.get("faceData")
@@ -222,8 +222,14 @@ def _face_material_assignments(elements: list[dict], mesh_attrs: dict, face_coun
             if isinstance(value, str):
                 source_path = value.replace("\\", "/").lstrip("/")
         normalized = (source_path or "").lower()
+        mapped_material = None
+        if source_path and isinstance(material_map, dict):
+            mapped_material = material_map.get(source_path) or material_map.get(source_path.lower())
+        if isinstance(mapped_material, str) and mapped_material.strip():
+            source1_material = mapped_material.strip().replace("\\\\", "/").replace("\\", "/").removesuffix(".vmt")
+            mapping = "generated_source1_material_map"
         # Only map tool materials whose Source 1 equivalents are sufficiently clear.
-        if normalized.endswith("materials/tools/toolsinvisible.vmat") or normalized.endswith("materials/tools/toolsnodraw.vmat"):
+        elif normalized.endswith("materials/tools/toolsinvisible.vmat") or normalized.endswith("materials/tools/toolsnodraw.vmat"):
             source1_material = "TOOLS/TOOLSNODRAW"
             mapping = "known_tool_material_equivalent"
         elif normalized.endswith("materials/tools/toolsskybox.vmat"):
@@ -338,7 +344,7 @@ def _scan_source2_materials(elements: list[dict], materials_root: Path | None) -
     )
     return report
 
-def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | None = None, materials_root: Path | None = None) -> dict:
+def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | None = None, materials_root: Path | None = None, material_map_path: Path | None = None) -> dict:
     started = time.monotonic()
     print(f"[1/3] Parsing editable VMAP: {vmap_path}", flush=True)
     graph = parse_binary_v9(vmap_path, include_binary=False)
@@ -347,6 +353,17 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
     mesh_nodes = [(i, n) for i, n in enumerate(elements) if n.get("type") == "CMapMesh"]
     total = len(mesh_nodes)
     material_scan = _scan_source2_materials(elements, materials_root)
+    material_map = {}
+    if material_map_path is not None:
+        try:
+            loaded_map = json.loads(material_map_path.read_text(encoding="utf-8-sig"))
+            if isinstance(loaded_map, dict):
+                raw_map = loaded_map.get("material_map", loaded_map)
+                if isinstance(raw_map, dict):
+                    material_map = {str(k): str(v) for k, v in raw_map.items() if isinstance(v, str)}
+            print(f"Loaded {len(material_map):,} Source 1 material mapping(s) from {material_map_path}.", flush=True)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"Could not read material mapping JSON {material_map_path}: {exc}") from exc
     print(f"Material scan: {material_scan['referenced_vmat_count']} referenced VMAT path(s).", flush=True)
     meshdata_users = {}
     for mesh_i, mesh_node in mesh_nodes:
@@ -386,7 +403,7 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
             item.update(_material_diagnostics(elements, mesh_attrs))
             edge_count = len(mesh_attrs.get("edgeNextIndices", [])) if isinstance(mesh_attrs.get("edgeNextIndices"), list) else 0
             face_count = len(mesh_attrs.get("faceEdgeIndices", [])) if isinstance(mesh_attrs.get("faceEdgeIndices"), list) else 0
-            face_material_assignments = _face_material_assignments(elements, mesh_attrs, face_count)
+            face_material_assignments = _face_material_assignments(elements, mesh_attrs, face_count, material_map)
             item["face_material_assignments"] = face_material_assignments
             # Announce the current mesh before decoding, so a single expensive mesh is visible.
             print(f"  Processing mesh {ordinal:,}/{total:,} (element {index}, edges {edge_count:,}, faces {face_count:,})...", flush=True)
@@ -539,6 +556,7 @@ def main(argv=None) -> int:
     parser.add_argument("--output", type=Path, help="Output VMF (default: <map>_brushes.vmf)")
     parser.add_argument("--report", type=Path, help="Optional JSON report listing exported and skipped meshes")
     parser.add_argument("--materials-root", type=Path, help="Addon materials folder")
+    parser.add_argument("--material-map", type=Path, help="Optional JSON mapping Source 2 VMAT paths to generated Source 1 material names")
     args = parser.parse_args(argv)
     if not args.vmap.is_file():
         parser.error(f"VMAP file not found: {args.vmap}")
@@ -547,7 +565,9 @@ def main(argv=None) -> int:
     output = args.output or args.vmap.with_name(args.vmap.stem + "_brushes.vmf")
     report = args.report or output.with_name(output.stem + "_report.json")
     try:
-        result = export_vmap_to_vmf(args.vmap, output, report, args.materials_root)
+        if args.material_map is not None and not args.material_map.is_file():
+        parser.error(f"Material mapping JSON not found: {args.material_map}")
+    result = export_vmap_to_vmf(args.vmap, output, report, args.materials_root, args.material_map)
     except (OSError, DMXError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr, flush=True)
         return 1

@@ -248,16 +248,29 @@ def _face_material_assignments(elements: list[dict], mesh_attrs: dict, face_coun
     return assignments
 
 
-def _scan_source2_materials(elements: list[dict], materials_root: Path | None) -> dict:
-    """Report VMAT and texture availability in addon/shared asset roots; no conversion."""
+def _scan_source2_materials(
+    elements: list[dict],
+    materials_root: Path | None,
+    mesh_nodes: list[tuple[int, dict]] | None = None,
+) -> dict:
+    """Report only VMATs referenced by this VMAP's CMapMesh geometry.
+
+    This resolves exact referenced paths in the selected/shared roots; it does
+    not recursively scan materials folders or include unrelated VMAP elements.
+    """
     refs = set()
-    for element in elements:
-        attrs = element.get("attributes", {}) if isinstance(element, dict) else {}
-        values = attrs.get("materials", [])
+    for _, mesh_node in (mesh_nodes or []):
+        attrs = mesh_node.get("attributes", {}) if isinstance(mesh_node, dict) else {}
+        mesh_ref = attrs.get("meshData", {})
+        mesh_index = mesh_ref.get("element_index") if isinstance(mesh_ref, dict) else None
+        if not isinstance(mesh_index, int) or not (0 <= mesh_index < len(elements)):
+            continue
+        mesh_attrs = elements[mesh_index].get("attributes", {})
+        values = mesh_attrs.get("materials", [])
         if isinstance(values, list):
             for value in values:
                 if isinstance(value, str) and value.lower().endswith(".vmat"):
-                    refs.add(value.replace("\\", "/").lstrip("/"))
+                    refs.add(value.replace("\\\\", "/").replace("\\", "/").lstrip("/"))
 
     report = {
         "materials_root": str(materials_root) if materials_root else None,
@@ -352,7 +365,7 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
     elements = graph.get("elements", [])
     mesh_nodes = [(i, n) for i, n in enumerate(elements) if n.get("type") == "CMapMesh"]
     total = len(mesh_nodes)
-    material_scan = _scan_source2_materials(elements, materials_root)
+    material_scan = _scan_source2_materials(elements, materials_root, mesh_nodes)
     material_map = {}
     if material_map_path is not None:
         try:

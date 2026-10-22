@@ -32,8 +32,8 @@ class ConverterApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title(APP_TITLE)
-        self.root.geometry("820x620")
-        self.root.minsize(700, 520)
+        self.root.geometry("920x760")
+        self.root.minsize(780, 620)
 
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.worker: threading.Thread | None = None
@@ -46,6 +46,10 @@ class ConverterApp:
         self.report_file = tk.StringVar()
         self.materials_root = tk.StringVar()
         self.material_map_file = tk.StringVar()
+        self.source2viewer_cli = tk.StringVar()
+        self.vtfcmd = tk.StringVar()
+        self.game_root = tk.StringVar()
+        self.material_output = tk.StringVar()
         self.status = tk.StringVar(value="Ready — choose an editable .vmap file.")
         self.open_output = tk.BooleanVar(value=False)
 
@@ -64,6 +68,10 @@ class ConverterApp:
         self.path_row(outer, "Input .vmap", self.input_file, self.pick_input, "Choose map…")
         self.path_row(outer, "Materials folder", self.materials_root, self.pick_materials, "Choose folder…")
         self.path_row(outer, "Material map JSON", self.material_map_file, self.pick_material_map, "Choose file…")
+        self.path_row(outer, "Source2Viewer CLI", self.source2viewer_cli, self.pick_source2viewer, "Choose exe…")
+        self.path_row(outer, "VTFCmd", self.vtfcmd, self.pick_vtfcmd, "Choose exe…")
+        self.path_row(outer, "CS2 game folder", self.game_root, self.pick_game_root, "Choose folder…")
+        self.path_row(outer, "Output materials", self.material_output, self.pick_material_output, "Choose folder…")
         self.path_row(outer, "Output .vmf", self.output_file, self.pick_output, "Save as…")
         self.path_row(outer, "JSON report", self.report_file, self.pick_report, "Save as…")
 
@@ -75,6 +83,8 @@ class ConverterApp:
         buttons.pack(fill="x", pady=(0, 8))
         self.start_button = ttk.Button(buttons, text="Start conversion", command=self.start)
         self.start_button.pack(side="left")
+        self.recover_button = ttk.Button(buttons, text="Recover Source 2 materials", command=self.recover_materials)
+        self.recover_button.pack(side="left", padx=(8, 0))
         ttk.Button(buttons, text="Open converter folder", command=self.open_converter_folder).pack(
             side="left", padx=(8, 0)
         )
@@ -135,6 +145,58 @@ class ConverterApp:
         )
         if path:
             self.material_map_file.set(path)
+
+    def pick_source2viewer(self):
+        path = filedialog.askopenfilename(title="Choose Source2Viewer-CLI.exe", filetypes=[("Executable", "*.exe"), ("All files", "*.*")])
+        if path:
+            self.source2viewer_cli.set(path)
+
+    def pick_vtfcmd(self):
+        path = filedialog.askopenfilename(title="Choose VTFCmd.exe", filetypes=[("Executable", "*.exe"), ("All files", "*.*")])
+        if path:
+            self.vtfcmd.set(path)
+
+    def pick_game_root(self):
+        path = filedialog.askdirectory(title="Choose CS2 game\\csgo folder containing VPK archives")
+        if path:
+            self.game_root.set(path)
+
+    def pick_material_output(self):
+        path = filedialog.askdirectory(title="Choose Source 1 materials output folder")
+        if path:
+            self.material_output.set(path)
+
+    def recover_materials(self):
+        if self.worker and self.worker.is_alive():
+            messagebox.showinfo(APP_TITLE, "Wait for the current task to finish first.")
+            return
+        folder = Path(self.converter_dir.get()).expanduser()
+        script = folder / "recover_source2_materials.py"
+        report = Path(self.report_file.get()).expanduser()
+        cli = Path(self.source2viewer_cli.get()).expanduser()
+        vtfcmd = Path(self.vtfcmd.get()).expanduser()
+        game_root = Path(self.game_root.get()).expanduser()
+        output_materials = Path(self.material_output.get()).expanduser()
+        checks = [(script, "Material recovery script"), (report, "JSON report"), (cli, "Source2Viewer-CLI.exe"), (vtfcmd, "VTFCmd.exe"), (game_root, "CS2 game folder"), (output_materials, "Output materials folder")]
+        for candidate, label in checks:
+            if not candidate.exists():
+                messagebox.showerror(APP_TITLE, f"{label} path does not exist:\\n{candidate}")
+                return
+        if not script.is_file() or not report.is_file() or not cli.is_file() or not vtfcmd.is_file() or not game_root.is_dir() or not output_materials.is_dir():
+            messagebox.showerror(APP_TITLE, "Choose valid files and folders for material recovery.")
+            return
+        command = [python_executable(), str(script), "--report", str(report), "--game-root", str(game_root), "--source2viewer-cli", str(cli), "--vtfcmd", str(vtfcmd), "--output-materials", str(output_materials)]
+        self.start_button.configure(state="disabled")
+        self.recover_button.configure(state="disabled")
+        self.progress.start(10)
+        self.status.set("Recovering Source 2 materials…")
+        self.append_log("Starting Source 2 material recovery")
+        self.append_log(f"Report: {report}")
+        self.append_log(f"Game folder: {game_root}")
+        self.append_log(f"Output materials: {output_materials}")
+        self.append_log("-" * 60)
+        self.worker = threading.Thread(target=self.run_process, args=(command, folder), daemon=True)
+        self.worker.start()
 
     def pick_output(self):
         path = filedialog.asksaveasfilename(
@@ -274,6 +336,7 @@ class ConverterApp:
                     code = int(value)
                     self.progress.stop()
                     self.start_button.configure(state="normal")
+                    self.recover_button.configure(state="normal")
                     self.process = None
                     if code == 0:
                         self.status.set("Finished successfully.")
@@ -291,6 +354,7 @@ class ConverterApp:
                 elif kind == "error":
                     self.progress.stop()
                     self.start_button.configure(state="normal")
+                    self.recover_button.configure(state="normal")
                     self.status.set("Could not start converter.")
                     self.append_log("ERROR: " + str(value))
                     messagebox.showerror(APP_TITLE, "Could not start the converter:\n" + str(value))

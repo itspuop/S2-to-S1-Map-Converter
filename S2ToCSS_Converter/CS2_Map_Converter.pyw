@@ -181,7 +181,7 @@ class ConverterApp:
         checks = [(script, "Material recovery script"), (report, "JSON report"), (cli, "Source2Viewer-CLI.exe"), (vtfcmd, "VTFCmd.exe"), (game_root, "CS2 game folder"), (output_materials, "Output materials folder")]
         for candidate, label in checks:
             if not candidate.exists():
-                messagebox.showerror(APP_TITLE, f"{label} path does not exist:\\n{candidate}")
+                messagebox.showerror(APP_TITLE, f"{label} path does not exist:\n{candidate}")
                 return
         if not script.is_file() or not report.is_file() or not cli.is_file() or not vtfcmd.is_file() or not game_root.is_dir() or not output_materials.is_dir():
             messagebox.showerror(APP_TITLE, "Choose valid files and folders for material recovery.")
@@ -347,7 +347,7 @@ class ConverterApp:
                             self.append_log("Material recovery completed. Review the recovery report, then select s2_material_map.json in the Material map JSON field before converting again.")
                             messagebox.showinfo(
                                 APP_TITLE,
-                                "Material recovery finished.\\n\\nReview the recovery report, then select s2_material_map.json in the Material map JSON field and run conversion again.",
+                                "Material recovery finished.\n\nReview the recovery report, then select s2_material_map.json in the Material map JSON field and run conversion again.",
                             )
                         else:
                             self.status.set("Finished successfully.")
@@ -356,7 +356,7 @@ class ConverterApp:
                                 os.startfile(str(Path(self.output_file.get()).parent))
                             messagebox.showinfo(
                                 APP_TITLE,
-                                "Conversion completed successfully.\\n\\nYour VMF and JSON report are ready.",
+                                "Conversion completed successfully.\n\nYour VMF and JSON report are ready.",
                             )
                     else:
                         self.status.set(f"Conversion failed (exit code {code}). See the log.")

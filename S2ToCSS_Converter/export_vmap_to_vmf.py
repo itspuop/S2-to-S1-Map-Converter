@@ -522,7 +522,7 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
         "exported_brush_count": exported, "skipped_mesh_count": skipped,
         "complete": True,
         "elapsed_seconds": round(time.monotonic() - started, 2),
-        "material_policy": "All exported faces use TOOLS/TOOLSNODRAW; Source 2 VMAT translation is not implemented.",
+        "material_policy": "Per-face material slots are read from faceData materialindex streams. Known tool-material equivalents are mapped; other Source 2 materials safely fall back to TOOLS/TOOLSNODRAW because VMAT-to-VMT conversion is not implemented.",
         "material_scan": material_scan,
         "meshes": results,
     }

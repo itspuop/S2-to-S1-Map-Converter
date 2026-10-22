@@ -157,6 +157,26 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
                     validation = {"valid": False, "issues": [f"Validation complexity limit exceeded ({len(vertices)} vertices x {len(faces)} faces); convert this complex mesh to a model in Hammer."]}
                 else:
                     validation = validate_convex_brush(vertices, faces)
+                    # Index-based topology checks can miss duplicate faces when different
+                    # vertex indices contain the same coordinates. Compare each face by
+                    # its rounded geometric vertex set, independent of winding/order.
+                    face_signatures = {}
+                    duplicate_geometric_face_pairs = []
+                    for face_index, face in enumerate(faces):
+                        signature = tuple(sorted(
+                            tuple(round(float(vertices[vertex_index][axis]), 4) for axis in range(3))
+                            for vertex_index in face
+                        ))
+                        if signature in face_signatures:
+                            duplicate_geometric_face_pairs.append([face_signatures[signature], face_index])
+                        else:
+                            face_signatures[signature] = face_index
+                    if duplicate_geometric_face_pairs:
+                        validation["valid"] = False
+                        validation.setdefault("issues", []).append(
+                            f"Duplicate geometric faces detected (same coordinates with same or reversed winding): {duplicate_geometric_face_pairs}"
+                        )
+                        item["duplicate_geometric_face_pairs"] = duplicate_geometric_face_pairs
                 if decoded is not None:
                     item["validation"] = validation
                     item["counts"] = decoded.get("counts")

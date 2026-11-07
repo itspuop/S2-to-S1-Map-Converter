@@ -185,9 +185,20 @@ def _convert_texture(source_ref: str, source_root: Path, output_root: Path,
     target.parent.mkdir(parents=True, exist_ok=True)
     if source.suffix.lower() == ".vtex":
         try:
-            vtex_tree = parse_keyvalues(source.read_text(encoding="utf-8-sig", errors="replace"))
-            image_refs = [str(value) for _, key, value in _walk(vtex_tree)
-                          if key.lower() in {"m_filename", "filename"} and isinstance(value, str)]
+            vtex_text = source.read_text(encoding="utf-8-sig", errors="replace")
+            try:
+                vtex_tree = parse_keyvalues(vtex_text)
+                image_refs = [str(value) for _, key, value in _walk(vtex_tree)
+                              if key.lower() in {"m_filename", "filename"} and isinstance(value, str)]
+            except Exception:
+                image_refs = []
+            # Legacy DME VTEX documents encode typed arrays ("string" before values),
+            # which are outside the generic KV3 parser subset; recover filenames directly.
+            if not image_refs:
+                image_refs = re.findall(
+                    r'"m_fileName"\s+"(?:string"\s+)?"([^"]+)"',
+                    vtex_text, flags=re.IGNORECASE
+                )
             image_source = None
             for image_ref in image_refs:
                 image_rel = _texture_reference(image_ref)

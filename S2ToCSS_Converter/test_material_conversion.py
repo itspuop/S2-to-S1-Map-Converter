@@ -43,7 +43,16 @@ class MaterialConversionTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (root / "props" / "stone_color.vtex").write_text(
-                '{ m_inputTextureArray = [ { m_fileName = "materials/props/stone_color.tga" } ] }',
+                '''<!-- dmx encoding keyvalues2_noids 1 format vtex 1 -->
+                "CDmeVtex" {
+                    "m_inputTextureArray" "element_array"
+                    [
+                        "CDmeInputTexture" {
+                            "m_name" "string" "InputTexture0"
+                            "m_fileName" "string" "materials/props/stone_color.tga"
+                        }
+                    ]
+                }''',
                 encoding="utf-8",
             )
             (root / "props" / "stone_color.tga").write_bytes(b"image")

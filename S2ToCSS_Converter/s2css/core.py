@@ -489,6 +489,7 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                         report.counts['model_vmat_missing'] = len(model_material_result.get('missing_vmat', []))
                         report.counts['model_material_conversion_report'] = str(model_material_report)
                         report.warnings.extend(model_material_result.get('warnings', []))
+                        report.warnings.extend(model_material_result.get('limitations', []))
                     report.counts['unique_model_sources'] = len(model_result.get('models', []))
                     report.counts['compiled_model_variants'] = sum(
                         len(item.get('compiled', {})) for item in model_result.get('models', [])

@@ -200,8 +200,9 @@ The converter now has an initial automatic VMAT-to-VMT stage for referenced map
 materials. It reads text VMAT/KV3 key/value blocks, maps recognized color/normal/
 emissive and selected scalar inputs, writes VMTs under
 `materials/s2_import/`, and resolves loose raster/VTF texture dependencies.
-When VTFCmd is configured, loose raster textures are compiled to VTF. Generated
-VMT names are fed back into per-face VMF material assignment.
+When VTFCmd is configured, loose raster textures are compiled to VTF. The resolver
+checks the selected addon materials folder and the shared content/game material roots
+reported by the VMAP scan. Generated VMT names are fed back into per-face VMF material assignment.
 
 This is a compatibility layer, not a complete Source 2 shader reimplementation.
 Unknown shader parameters are recorded in `*_material_conversion.json`; missing

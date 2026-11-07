@@ -374,16 +374,22 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                         ]
                         if materials_root and material_refs:
                             progress(f'Converting {len(material_refs)} referenced VMAT material(s) and their textures…')
+                            material_search_roots = [
+                                Path(item['path']) for item in material_scan.get('texture_roots', [])
+                                if item.get('exists') and item.get('path')
+                            ]
                             material_result = convert_vmat_references(
                                 material_refs, materials_root, output_dir / 'materials' / 's2_import',
-                                vtfcmd or (toolchain or {}).get('vtfcmd', '')
+                                vtfcmd or (toolchain or {}).get('vtfcmd', ''),
+                                search_roots=material_search_roots
                             )
                             material_map = {}
                             for item in material_result.get('results', []):
-                                source_vmat = Path(item['source_vmat'])
-                                relative = source_vmat.relative_to(materials_root).with_suffix('')
+                                output_vmt = Path(item['output_vmt'])
+                                relative = output_vmt.relative_to(output_dir / 'materials' / 's2_import').with_suffix('')
                                 generated_name = 's2_import/' + relative.as_posix()
-                                source_names = [relative.as_posix() + '.vmat',
+                                source_name = str(item.get('source_vmat_ref', '')).replace(chr(92), '/').lstrip('/')
+                                source_names = [source_name, relative.as_posix() + '.vmat',
                                                 'materials/' + relative.as_posix() + '.vmat']
                                 for key in source_names:
                                     normalized_key = key.replace('\\', '/')

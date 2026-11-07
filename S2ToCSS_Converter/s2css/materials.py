@@ -129,14 +129,18 @@ def _resolve_vmat(root: Path, ref: str) -> Path | None:
     return sorted(matches, key=lambda p: (len(p.parts), str(p).lower()))[0] if matches else None
 
 def _convert_texture(source_ref: str, source_root: Path, output_root: Path,
-                     vtfcmd: str, warnings: list[str]) -> bool:
+                     vtfcmd: str, warnings: list[str], search_roots=None) -> bool:
     rel = _texture_reference(source_ref)
     if not rel: return False
-    candidates = [source_root / (rel + ext) for ext in (".tga", ".png", ".jpg", ".jpeg", ".psd", ".vtf")]
-    source = next((p for p in candidates if p.is_file()), None)
-    if source is None:
-        candidates = [source_root / (rel + ext) for ext in (".vtex", ".vtex_c")]
+    roots = [source_root] + [Path(p) for p in (search_roots or []) if Path(p) != source_root]
+    source = None
+    for root in roots:
+        candidates = [root / (rel + ext) for ext in (".tga", ".png", ".jpg", ".jpeg", ".psd", ".vtf")]
         source = next((p for p in candidates if p.is_file()), None)
+        if source is None:
+            candidates = [root / (rel + ext) for ext in (".vtex", ".vtex_c")]
+            source = next((p for p in candidates if p.is_file()), None)
+        if source is not None: break
     if source is None:
         warnings.append(f"Missing texture source for {source_ref}")
         return False
@@ -166,7 +170,7 @@ def _convert_texture(source_ref: str, source_root: Path, output_root: Path,
         return False
 
 def convert_vmat_file(vmat_path: Path, materials_root: Path, output_root: Path,
-                      vtfcmd: str = "", brush_material: bool = True) -> dict:
+                      vtfcmd: str = "", brush_material: bool = True, search_roots=None) -> dict:
     warnings: list[str] = []
     source_text = vmat_path.read_text(encoding="utf-8-sig", errors="replace")
     tree = parse_keyvalues(source_text)
@@ -218,7 +222,7 @@ def convert_vmat_file(vmat_path: Path, materials_root: Path, output_root: Path,
     if "$basetexture" not in params:
         warnings.append(f"{vmat_path.name}: no recognized base-color texture parameter; VMT may render as a fallback.")
     for texture in dict.fromkeys(texture_values):
-        _convert_texture(texture, materials_root, output_root, vtfcmd, warnings)
+        _convert_texture(texture, materials_root, output_root, vtfcmd, warnings, search_roots)
     vmt_path = output_root / vmat_path.relative_to(materials_root).with_suffix(".vmt")
     vmt_path.parent.mkdir(parents=True, exist_ok=True)
     params.setdefault("$surfaceprop", "default")
@@ -231,15 +235,24 @@ def convert_vmat_file(vmat_path: Path, materials_root: Path, output_root: Path,
             "parameters": params, "unknown_parameters": unknown, "warnings": warnings}
 
 def convert_vmat_references(material_refs: list[str], materials_root: Path,
-                            output_materials_root: Path, vtfcmd: str = "") -> dict:
+                            output_materials_root: Path, vtfcmd: str = "", search_roots=None) -> dict:
     results, missing, warnings = [], [], []
+    roots = [materials_root] + [Path(p) for p in (search_roots or []) if Path(p) != materials_root]
     for ref in sorted(set(material_refs), key=str.lower):
-        source = _resolve_vmat(materials_root, ref)
+        source = None
+        source_root = materials_root
+        for root in roots:
+            source = _resolve_vmat(root, ref)
+            if source is not None:
+                source_root = root
+                break
         if source is None:
             missing.append(ref)
             continue
         try:
-            result = convert_vmat_file(source, materials_root, output_materials_root, vtfcmd)
+            result = convert_vmat_file(source, source_root, output_materials_root, vtfcmd,
+                                       search_roots=roots)
+            result["source_vmat_ref"] = ref
             results.append(result)
             warnings.extend(result["warnings"])
         except Exception as exc:

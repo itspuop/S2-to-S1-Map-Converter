@@ -5,6 +5,7 @@ from pathlib import Path
 
 from s2css.model_pipeline import (
     build_prop_entities,
+    extract_smd_material_names,
     find_model_source,
     safe_name,
     write_qc,
@@ -73,6 +74,17 @@ class ModelPipelineTests(unittest.TestCase):
         self.assertEqual(entities[0]["origin"], "1 2 3")
         self.assertEqual(entities[0]["skin"], "1")
         self.assertEqual(entities[0]["model"], "models/s2_import/crate_static.mdl")
+
+    def test_extracts_smd_triangle_material_names(self):
+        with TemporaryDirectory() as tmp:
+            smd = Path(tmp) / "model.smd"
+            smd.write_text(
+                "version 1\ntriangles\nmodels/coral\n"
+                "0 0 0 0 0 0 0 0 0\n0 0 0 0 0 0 0 0 0\n"
+                "0 0 0 0 0 0 0 0 0\nend\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(extract_smd_material_names(smd), ["models/coral"])
 
     def test_normalizes_vmat_paths_in_smd_triangle_materials(self):
         with TemporaryDirectory() as tmp:

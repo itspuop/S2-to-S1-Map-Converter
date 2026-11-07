@@ -17,6 +17,25 @@ SUPPORTED_SOURCE_EXTENSIONS = (".dmx", ".fbx")
 SUPPORTED_PROP_CLASSES = {"prop_static", "prop_dynamic", "prop_dynamic_override", "prop_physics", "prop_physics_override", "prop_physics_multiplayer"}
 
 
+def extract_smd_material_names(smd_path: str | Path) -> list[str]:
+    """Read material names from the SMD triangles section."""
+    names = []
+    in_triangles = False
+    for line in Path(smd_path).read_text(encoding="utf-8-sig", errors="replace").splitlines():
+        stripped = line.strip()
+        if stripped.lower() == "triangles":
+            in_triangles = True
+            continue
+        if not in_triangles or not stripped:
+            continue
+        if stripped.lower() == "end":
+            break
+        if stripped.split()[0].lstrip("+-").isdigit():
+            continue
+        names.append(stripped.strip('"'))
+    return sorted(set(names), key=str.lower)
+
+
 def safe_name(value: str) -> str:
     cleaned = "".join(c if c.isalnum() or c in "_-" else "_" for c in Path(value.replace("\\", "/")).stem)
     return cleaned.strip("_") or "source_model"

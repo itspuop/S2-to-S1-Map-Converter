@@ -10,7 +10,7 @@ from pathlib import Path
 from dataclasses import dataclass, asdict
 from .dmx_binary import parse_binary_v9, summarize_graph, extract_transform_records, DMXError
 from .model_inventory import build_model_instance_inventory, write_model_instance_inventory
-from .model_pipeline import process_model_instances, build_prop_entities
+from .model_pipeline import process_model_instances, build_prop_entities, extract_smd_material_names
 from .vmap_export import export_vmap_to_vmf
 from .materials import convert_vmat_references, scan_dmx_material_references, collect_vmat_references, stage_materials_to_game
 from .entity_conversion import build_entity_conversion, append_entity_blocks
@@ -513,6 +513,46 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                                     report.counts.get('materials_staged_to_game', 0), staged
                                 )
                                 report.counts['materials_stage_target'] = str(game_target / 'materials' / 's2_import')
+                    missing_smd_materials = []
+                    game_material_root = (
+                        Path(toolchain['game_dir']).expanduser() / 'materials'
+                        if toolchain and toolchain.get('game_dir') else None
+                    )
+                    for model_record in model_result.get('models', []):
+                        smd_file = model_record.get('smd_file')
+                        if not smd_file or not Path(smd_file).is_file():
+                            continue
+                        try:
+                            material_names = extract_smd_material_names(smd_file)
+                        except Exception as smd_error:
+                            report.warnings.append(f"Could not inspect SMD materials in {Path(smd_file).name}: {smd_error}")
+                            continue
+                        for material_name in material_names:
+                            relative = material_name.replace(chr(92), '/').strip().strip('"')
+                            if relative.lower().startswith('materials/'):
+                                relative = relative[10:]
+                            if relative.lower().startswith('s2_import/'):
+                                relative = relative[10:]
+                            for suffix in ('.vmat_c', '.vmat', '.vmt'):
+                                if relative.lower().endswith(suffix):
+                                    relative = relative[:-len(suffix)]
+                                    break
+                            candidates = [output_dir / 'materials' / 's2_import' / (relative + '.vmt')]
+                            if game_material_root:
+                                candidates.extend([
+                                    game_material_root / 's2_import' / (relative + '.vmt'),
+                                    game_material_root / (relative + '.vmt'),
+                                ])
+                            if not any(candidate.is_file() for candidate in candidates):
+                                missing_smd_materials.append({
+                                    'model': model_record.get('source_model', ''),
+                                    'material': material_name,
+                                })
+                    report.counts['model_smd_materials_missing_vmt'] = len(missing_smd_materials)
+                    if missing_smd_materials:
+                        report.warnings.append(
+                            f"{len(missing_smd_materials)} SMD material name(s) have no matching VMT in the output or configured CS:S materials folder; see the model manifest and conversion report."
+                        )
                     report.counts['unique_model_sources'] = len(model_result.get('models', []))
                     report.counts['compiled_model_variants'] = sum(
                         len(item.get('compiled', {})) for item in model_result.get('models', [])

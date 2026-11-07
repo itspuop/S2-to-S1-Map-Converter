@@ -335,7 +335,9 @@ def stage_materials_to_game(source_materials_root: Path, game_dir: Path) -> int:
         return 0
     target_root = game_root / "materials" / "s2_import"
     try:
-        if source_root.resolve() == target_root.resolve():
+        resolved_source = source_root.resolve()
+        resolved_target = target_root.resolve()
+        if resolved_source == resolved_target or resolved_source in resolved_target.parents:
             return 0
     except OSError:
         pass
@@ -351,8 +353,7 @@ def stage_materials_to_game(source_materials_root: Path, game_dir: Path) -> int:
 
 
 def convert_vmat_references(material_refs: list[str], materials_root: Path,
-                            output_materials_root: Path, vtfcmd: str = "", search_roots=None,
-                            brush_material: bool = True) -> dict:
+                            output_materials_root: Path, vtfcmd: str = "", search_roots=None) -> dict:
     results, missing, warnings = [], [], []
     roots = [materials_root] + [Path(p) for p in (search_roots or []) if Path(p) != materials_root]
     for ref in sorted(set(material_refs), key=str.lower):
@@ -368,7 +369,7 @@ def convert_vmat_references(material_refs: list[str], materials_root: Path,
             continue
         try:
             result = convert_vmat_file(source, source_root, output_materials_root, vtfcmd,
-                                       brush_material=brush_material, search_roots=roots)
+                                       search_roots=roots)
             result["source_vmat_ref"] = ref
             results.append(result)
             warnings.extend(result["warnings"])

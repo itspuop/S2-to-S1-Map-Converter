@@ -20,30 +20,18 @@ def main():
         except Exception as exc:
             raise RuntimeError(f"Blender Python API is unavailable: {exc}")
 
-        try:
-            bpy.ops.preferences.addon_enable(module="io_scene_fbx")
-        except Exception:
-            pass
-        try:
-            bpy.ops.preferences.addon_enable(module="io_scene_valvesource")
-        except Exception:
-            pass
+        # Start from an empty scene, then enable the installed import/export add-ons.
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        for addon_module in ("io_scene_fbx", "io_scene_valvesource"):
+            try:
+                bpy.ops.preferences.addon_enable(module=addon_module)
+            except Exception:
+                pass
         if not hasattr(bpy.context.scene, "vs"):
             raise RuntimeError(
-                "Blender Source Tools is not enabled in this Blender profile. "
-                "Enable the io_scene_valvesource add-on and retry."
+                "Blender Source Tools did not register Scene.vs. "
+                "Check that io_scene_valvesource 3.4.3 is installed in this Blender profile."
             )
-
-        bpy.ops.wm.read_factory_settings(use_empty=True)
-        # Factory reset clears the active scene but does not unregister the enabled add-on.
-        if not hasattr(bpy.context.scene, "vs"):
-            bpy.ops.preferences.addon_enable(module="io_scene_valvesource")
-        try:
-            bpy.ops.preferences.addon_enable(module="io_scene_fbx")
-        except Exception:
-            pass
-        if not hasattr(bpy.context.scene, "vs"):
-            raise RuntimeError("Blender Source Tools did not register Scene.vs.")
 
         suffix = source.suffix.lower()
         if suffix == ".fbx":

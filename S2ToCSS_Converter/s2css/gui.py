@@ -102,7 +102,7 @@ class App:
             import os; os.startfile(str(p))
         else: messagebox.showinfo('Output','Output folder does not exist yet.')
     def about(self):
-        messagebox.showinfo('Current stage','The app shows live progress in this window. It can decode editable binary-DMX VMAP CMapMesh topology, export only closed planar convex brushes to VMF, inventory model-backed entities, and optionally run Blender Source Tools FBX/DMX to SMD/QC plus CS:S studiomdl. Compiled model props are appended to the map VMF when available. Configure Blender, studiomdl, the CS:S game folder, and optional materials paths in the fields above. Unsupported geometry, non-unit prop scales, complete VMAT conversion, and Source 2 entity I/O still require further work; inspect every output in Hammer.')
+        messagebox.showinfo('Current stage','The app shows live progress in this window. It decodes editable binary-DMX VMAP CMapMesh topology, exports supported closed planar convex brushes to VMF, inventories model-backed entities, and can run Blender Source Tools FBX/DMX to SMD/QC plus CS:S studiomdl. It also performs best-effort text-KV3 VMAT-to-VMT conversion, resolves editable VTEX image sources, converts loose textures with VTFCmd, scans model DMX material dependencies, and stages generated materials into the configured CS:S game directory. Common Source 1 entities and structured I/O connections are emitted, including names and keyvalues for compiled model props. Unsupported shaders/parameters, compiled VTEX_C extraction, unknown entity classes, non-unit prop scales, and coordinate conventions still require further work; inspect every output in Hammer.')
 
 def launch():
     root=tk.Tk();

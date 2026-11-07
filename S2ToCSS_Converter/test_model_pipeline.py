@@ -78,9 +78,9 @@ class ModelPipelineTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             smd = Path(tmp) / "model.smd"
             smd.write_text(
-                "version 1\\ntriangles\\nmaterials/models/coral.vmat\\n"
-                "0 0 0 0 0 0 0 0 0\\n0 0 0 0 0 0 0 0 0\\n"
-                "0 0 0 0 0 0 0 0 0\\nend\\n",
+                "version 1\ntriangles\nmaterials/models/coral.vmat\n"
+                "0 0 0 0 0 0 0 0 0\n0 0 0 0 0 0 0 0 0\n"
+                "0 0 0 0 0 0 0 0 0\nend\n",
                 encoding="utf-8",
             )
             changes = normalize_smd_material_paths(smd)

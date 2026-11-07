@@ -319,10 +319,10 @@ def build_prop_entities(rows: Iterable[dict], compiled_models: dict, warnings: l
         except (TypeError, ValueError):
             warnings.append(f"Skipped {ref} instance {row.get('element_index')}: non-numeric transform.")
             continue
-        if max(scale) - min(scale) > 1e-5:
+        if any(abs(value - 1.0) > 1e-5 for value in scale):
             warnings.append(
-                f"Skipped {ref} instance {row.get('element_index')}: non-uniform scale {scale} "
-                "cannot be represented safely by a single CS:S prop scale key."
+                f"Skipped {ref} instance {row.get('element_index')}: non-unit scale {scale} "
+                "must be baked into a per-scale model variant for CS:S; no entity scale key is emitted."
             )
             continue
         entity = {
@@ -334,11 +334,16 @@ def build_prop_entities(rows: Iterable[dict], compiled_models: dict, warnings: l
             "solid": str(row.get("solid") or "6"),
             "disableshadows": str(row.get("disableshadows") or "0"),
         }
-        if row.get("skin") not in (None, ""):
-            entity["skin"] = str(row["skin"])
-        if row.get("rendercolor") not in (None, ""):
-            entity["rendercolor"] = str(row["rendercolor"])
-        if abs(scale[0] - 1.0) > 1e-5:
-            entity["uniformscale" if classname == "prop_static" else "modelscale"] = f"{scale[0]:.6g}"
+        skin = row.get("skin")
+        if skin not in (None, ""):
+            try:
+                entity["skin"] = str(int(skin))
+            except (TypeError, ValueError):
+                warnings.append(f"Ignored non-numeric skin value {skin!r} on {ref} instance {row.get('element_index')}.")
+        rendercolor = row.get("rendercolor")
+        if rendercolor not in (None, ""):
+            channels = str(rendercolor).replace(",", " ").split()
+            if len(channels) >= 3:
+                entity["rendercolor"] = " ".join(channels[:3])
         entities.append(entity)
     return entities

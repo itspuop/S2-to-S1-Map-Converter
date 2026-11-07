@@ -47,7 +47,7 @@ The model entity VMF is deliberately separate from the world geometry VMF becaus
 native `CMapMesh` vertex streams, polygon topology, and convex brush reconstruction
 are not yet complete. VMAP model positions and angles are currently passed through
 unchanged; compare them in Hammer before treating the coordinate/rotation mapping
-as certified. Non-uniform model scales are skipped rather than approximated.
+as certified. Non-unit model scales are skipped rather than written to unsupported CS:S prop scale keys; per-scale baked model variants remain future work.
 Material translation and complete Source 2 entity/I/O conversion also remain
 unfinished.
 

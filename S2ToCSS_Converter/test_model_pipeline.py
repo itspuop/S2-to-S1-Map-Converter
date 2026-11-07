@@ -40,14 +40,14 @@ class ModelPipelineTests(unittest.TestCase):
             self.assertIn("$staticprop", text)
             self.assertIn('$collisionmodel "crate.smd"', text)
 
-    def test_builds_entity_only_for_compiled_model_and_uniform_scale(self):
+    def test_builds_entity_only_for_compiled_model_with_unit_scale(self):
         rows = [{
             "source_model": "models/props/crate.vmdl",
             "source_entity_class": "prop_static",
             "element_index": 10,
             "origin": [1, 2, 3],
             "angles": [0, 90, 0],
-            "scales": [2, 2, 2],
+            "scales": [1, 1, 1],
             "skin": "1",
         }]
         compiled = {"models/props/crate.vmdl": {"static": "models/s2_import/crate_static.mdl"}}
@@ -55,14 +55,14 @@ class ModelPipelineTests(unittest.TestCase):
         entities = build_prop_entities(rows, compiled, warnings)
         self.assertEqual(len(entities), 1)
         self.assertEqual(entities[0]["origin"], "1 2 3")
-        self.assertEqual(entities[0]["uniformscale"], "2")
+        self.assertEqual(entities[0]["skin"], "1")
         self.assertEqual(entities[0]["model"], "models/s2_import/crate_static.mdl")
 
-    def test_non_uniform_scale_is_skipped(self):
+    def test_non_unit_scale_is_skipped_for_css(self):
         rows = [{
             "source_model": "models/props/crate.vmdl",
             "source_entity_class": "prop_static",
-            "origin": [1, 2, 3], "angles": [0, 0, 0], "scales": [1, 2, 1],
+            "origin": [1, 2, 3], "angles": [0, 0, 0], "scales": [2, 2, 2],
         }]
         compiled = {"models/props/crate.vmdl": {"static": "models/s2_import/crate_static.mdl"}}
         warnings = []

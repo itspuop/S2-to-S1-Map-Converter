@@ -49,8 +49,8 @@ Model prop positions and angles are currently passed through unchanged; compare
 representative placements in Hammer before treating the coordinate/rotation
 mapping as certified. Non-unit model scales are skipped rather than written to
 unsupported CS:S prop scale keys; per-scale baked model variants remain future
-work. Full material translation and Source 2 entity/I/O conversion remain
-unfinished.
+work. VMAT-to-VMT and Source 2 entity/I/O conversion are now partially implemented;
+see the material/entity section below for current coverage and limitations.
 
 ## v0.9 development: integrated VMAP brushes and model props
 
@@ -95,10 +95,12 @@ Large, ambiguous, open, non-planar, non-manifold, non-convex, or otherwise
 unsupported meshes are skipped with a reason in the mesh report so they can be
 handled as models in Hammer. It does not fabricate geometry for failed decodes.
 
-Known tool materials can be mapped per face. Other Source 2 materials currently
-fall back to `TOOLS/TOOLSNODRAW`; complete VMAT shader/texture conversion is not
-implemented. Source 2 entity I/O, logic entities, displacements, overlays, and
-all special map features are not fully translated. Model prop positions and
+Known tool materials are mapped per face. Other Source 2 materials use generated
+VMT mappings when their VMATs and source textures can be resolved; unsupported
+shader parameters and compiled `.vtex_c` extraction remain limitations. Common
+Source 1 entities and recognizable I/O connections are emitted, but Source 2-specific
+entity behavior, unsupported classes/connection encodings, displacements, overlays,
+and special map features are not fully translated. Model prop positions and
 angles currently pass through unchanged; compare representative instances in
 Hammer before treating the coordinate/rotation mapping as certified. Non-unit
 model scales are skipped rather than approximated with unsupported CS:S entity
@@ -108,7 +110,7 @@ guaranteed one-click playable-map conversion for every VMAP.
 Run the expanded tests with:
 
 ```bat
-py -m unittest test_model_inventory test_model_pipeline test_mesh_decode test_mesh_validate test_vmf_export test_mesh_schema test_material_conversion test_entity_conversion test_material_conversion test_entity_conversion
+py -m unittest test_model_inventory test_model_pipeline test_mesh_decode test_mesh_validate test_vmf_export test_mesh_schema test_material_conversion test_entity_conversion
 py test_smoke.py
 ```
 
@@ -239,7 +241,7 @@ of what was emitted, skipped, or left unresolved.
 Run:
 
 ```bat
-py -m unittest test_model_inventory test_model_pipeline test_mesh_decode test_mesh_validate test_vmf_export test_mesh_schema
+py -m unittest test_model_inventory test_model_pipeline test_mesh_decode test_mesh_validate test_vmf_export test_mesh_schema test_material_conversion test_entity_conversion
 py test_smoke.py
 ```
 

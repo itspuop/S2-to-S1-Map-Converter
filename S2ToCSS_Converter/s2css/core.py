@@ -9,6 +9,7 @@ import csv, json, re, shutil, subprocess, time, traceback
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from .dmx_binary import parse_binary_v9, summarize_graph, extract_transform_records, DMXError
+from .model_inventory import build_model_instance_inventory, write_model_instance_inventory
 
 @dataclass
 class Report:
@@ -311,6 +312,11 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                 invpath.write_text(json.dumps(inv,indent=2),encoding='utf-8')
                 report.counts.setdefault('vmap_inventory_files', []).append(str(invpath))
                 if inv.get('dmx_parsed'):
+                    model_rows = build_model_instance_inventory(inv)
+                    model_json, model_csv = write_model_instance_inventory(model_rows, output_dir, p.stem)
+                    report.counts['model_instances_found'] = report.counts.get('model_instances_found', 0) + len(model_rows)
+                    report.counts.setdefault('model_instance_inventories', []).extend([str(model_json), str(model_csv)])
+                    progress(f'Model inventory complete: {len(model_rows)} model-backed entity instance(s) identified.')
                     csv_path=output_dir/(p.stem+'_transform_inventory.csv')
                     fields=['index','class','name','origin_x','origin_y','origin_z','pitch','yaw','roll','scale_x','scale_y','scale_z','mesh_face_count','mesh_vertex_count','mesh_materials','entity_properties_class']
                     with csv_path.open('w',newline='',encoding='utf-8-sig') as f:

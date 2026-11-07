@@ -50,11 +50,29 @@ for `.vmdl` / `.vmdl_c` references and writes:
   pitch/yaw/roll, scale, source node identity, and an explicit unmapped status.
 
 This is an inventory/handoff stage only. It does not yet create Source 1
-`prop_static` entities or compile MDLs. Transform values are preserved exactly
-as decoded from the VMAP; coordinate/angle conversion must be validated against
-a real map before they are emitted into a playable VMF. The next stage is to
-associate these records with manually exported Source 1 model assets and then
-generate VMF entities only for verified mappings.
+`prop_static` entities or compile MDLs. Transform values and selected entity properties are preserved exactly
+as decoded from the VMAP. The inventory also records the source entity class
+(e.g. `prop_static` / `prop_dynamic`), skin, solidity, render color, shadow
+setting, cubemap setting, and material override when present. Coordinate/angle
+conversion must be validated before these values are emitted into a playable
+VMF. The next stage is to associate these records with manually exported
+Source 1 model assets and then generate VMF entities only for verified mappings.
+
+### Validation against the supplied surf_the_wave.vmap
+
+The uploaded editable map was successfully parsed as binary DMX v9:
+
+- 32,506 DMX elements and 1,070 `CMapMesh` nodes.
+- 2,630 `CMapEntity` nodes.
+- 2,075 model-backed entities: 771 `prop_static` and 1,304 `prop_dynamic`.
+- 55 distinct referenced `.vmdl` paths.
+- All 2,075 model-backed entities contain an origin, angles, and scale.
+- Every model-backed entity has a direct `model` property matching its discovered model path.
+
+The map itself is used as a local validation input; it is not included in the
+repository. These counts validate model-reference discovery and raw transform
+capture, not Source 1 transform conversion, model compilation, or final VMF
+placement.
 
 Run the regression tests with:
 

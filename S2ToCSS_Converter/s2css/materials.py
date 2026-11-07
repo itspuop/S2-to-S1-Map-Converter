@@ -220,6 +220,21 @@ def convert_vmat_file(vmat_path: Path, materials_root: Path, output_root: Path,
         if low in _VECTOR_KEYS:
             params[_VECTOR_KEYS[low]] = _format_parameter(value)
             continue
+        if low in _FLAG_KEYS:
+            params[_FLAG_KEYS[low]] = _truth(value)
+            continue
+        if low in {"f_alpha_test", "alpha_test"}:
+            params["$alphatest"] = _truth(value)
+            continue
+        if low in {"f_translucent", "translucent"}:
+            params["$translucent"] = _truth(value)
+            continue
+        if low in {"f_self_illum", "self_illum"}:
+            params["$selfillum"] = _truth(value)
+            continue
+        if low in {"surfaceprop", "m_surfaceproperty", "m_surfacepropname"}:
+            params["$surfaceprop"] = str(value)
+            continue
         if isinstance(value, (dict, list)): continue
         if low in _TEXTURE_KEYS:
             tex = _texture_reference(value)
@@ -232,7 +247,7 @@ def convert_vmat_file(vmat_path: Path, materials_root: Path, output_root: Path,
             params[_BOOL_KEYS[low]] = _truth(value)
         elif low in {"shader", "m_shadername", "m_nodename", "m_editorclass"}:
             continue
-        elif low.startswith(("g_t", "g_fl", "g_b", "g_v", "g_c")):
+        elif low.startswith(("g_t", "g_fl", "g_b", "g_v", "g_c", "f_")):
             unknown.append({"key": path, "value": value})
     # Modern text KV3 stores shader inputs as arrays of {m_name, m_pValue/...} records.
     for parameter_name, parameter_value in _parameter_records(tree):

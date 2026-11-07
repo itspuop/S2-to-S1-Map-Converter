@@ -194,7 +194,7 @@ py -m unittest test_model_inventory.py
 
 ## Current limitations
 
-This branch now creates a partial VMF from safe convex CMapMesh geometry and successfully compiled model props. It is not a guaranteed complete playable-map converter: unsupported meshes are skipped, model transforms still need Hammer validation, and Source 2 entity/I/O conversion, displacements, overlays, and full VMAT shader/texture translation remain unfinished.
+This branch now creates a partial VMF from supported convex CMapMesh geometry, compiled model props, common Source 1 entities, and recognizable I/O connections. It is not a guaranteed complete playable-map converter: unsupported meshes and non-prop Source 2 model entities are skipped, model/entity transforms still need Hammer validation, VMAT shader conversion is best-effort, compiled VTEX_C extraction is unavailable, and Source 2-specific entity behavior, displacements, overlays, and special map features remain unfinished.
 
 ## VMAT, VMT, entities, and I/O (new development stage)
 

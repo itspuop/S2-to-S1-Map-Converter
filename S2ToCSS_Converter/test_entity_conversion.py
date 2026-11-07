@@ -34,6 +34,16 @@ class EntityConversionTests(unittest.TestCase):
             self.assertIn('"targetname" "relay_start"', text)
             self.assertIn('"OnTrigger" "door_1,Open,,0.25,-1"', text)
 
+    def test_normalizes_materialoverride_on_non_vmdl_prop(self):
+        result = build_entity_conversion([{
+            "index": 25, "class": "CMapEntity",
+            "entity_properties": {
+                "classname": "prop_static", "model": "models/legacy.mdl",
+                "materialoverride": "materials/models/legacy/override.vmat",
+            },
+        }])
+        self.assertEqual(result["entities"][0]["materialoverride"], "s2_import/models/legacy/override")
+
     def test_does_not_emit_duplicate_worldspawn(self):
         result = build_entity_conversion([{
             "index": 2, "class": "CMapEntity",

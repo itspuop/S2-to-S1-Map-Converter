@@ -177,6 +177,17 @@ def build_entity_conversion(records: list[dict]) -> dict:
             if normalized.lower() in {"origin", "angles", "model"} and classname.startswith("prop_"): continue
             scalar = _scalar(value)
             if scalar is None or normalized.lower() in {"id", "classname"}: continue
+            if normalized.lower() == "materialoverride" and ".vmat" in scalar.lower():
+                material_path = scalar.replace(chr(92), "/").lstrip("/")
+                if material_path.lower().startswith("materials/"):
+                    material_path = material_path[10:]
+                for suffix in (".vmat_c", ".vmat", ".vmt"):
+                    if material_path.lower().endswith(suffix):
+                        material_path = material_path[:-len(suffix)]
+                        break
+                if not material_path.lower().startswith("s2_import/"):
+                    material_path = "s2_import/" + material_path
+                scalar = material_path
             if str(key).lower().startswith("m_") and str(key).lower() not in _ALIASES:
                 unsupported_properties.append({"element_index": record.get("index"), "classname": classname, "property": str(key), "value": scalar})
                 continue

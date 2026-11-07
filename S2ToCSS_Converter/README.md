@@ -214,7 +214,8 @@ Review the generated VMTs in Hammer and in-game.
 The entity stage now attempts conservative passthrough of common Source 1
 `logic_`, `trigger_`, `func_`, `info_`, `point_`, `env_`, and related entity
 classes. It preserves scalar keyvalues and transforms, skips model-backed props
-already handled by the compiled-model pipeline, and writes
+already handled by the compiled-model pipeline. Compiled model props retain common
+keyvalues such as targetname/parentname and their structured output connections. It writes
 `*_entity_conversion.json` with skipped classes. Structured output records with
 recognizable output/target/input fields are serialized into VMF `connections`
 blocks, preserving parameter, delay, and fire count.

@@ -70,7 +70,7 @@ def _find_model_value(props: dict) -> bool:
                for k, v in props.items())
 
 def build_entity_conversion(records: list[dict]) -> dict:
-    entities, skipped, unsupported_properties = [], [], []
+    entities, skipped, unsupported_properties, model_prop_connections = [], [], [], []
     known_targets = set()
     for record in records:
         if record.get("class") != "CMapEntity": continue
@@ -80,7 +80,7 @@ def build_entity_conversion(records: list[dict]) -> dict:
         for key in ("targetname", "m_targetname", "name", "m_name"):
             value = lowered_props.get(key)
             if isinstance(value, str) and value.strip():
-                known_targets.add(value.strip())
+                known_targets.add(value.strip().casefold())
     for record in records:
         if record.get("class") != "CMapEntity": continue
         props = record.get("entity_properties")
@@ -99,7 +99,18 @@ def build_entity_conversion(records: list[dict]) -> dict:
             skipped.append({"element_index": record.get("index"), "classname": classname,
                             "reason": "Class is not in the conservative Source 1 passthrough allowlist."})
             continue
-        if classname.startswith("prop_") and _find_model_value(props): continue
+        if classname.startswith("prop_") and _find_model_value(props):
+            prop_connections = []
+            for connection in _find_connections(props):
+                parsed = _connection_fields(connection)
+                if parsed: prop_connections.append(parsed)
+            if prop_connections:
+                model_prop_connections.append({
+                    "element_index": record.get("index"),
+                    "targetname": lowered_props.get("targetname", lowered_props.get("m_targetname", lowered_props.get("m_name", ""))),
+                    "connections": prop_connections,
+                })
+            continue
         keys = {"id": str(2000000 + int(record.get("index") or 0)), "classname": classname}
         if record.get("origin") is not None: keys["origin"] = _scalar(record["origin"]) or ""
         if record.get("angles") is not None: keys["angles"] = _scalar(record["angles"]) or ""
@@ -121,20 +132,24 @@ def build_entity_conversion(records: list[dict]) -> dict:
         entities.append(keys)
     unresolved_connections = []
     special_targets = {"!activator", "!caller", "!self", "!player", "!pvsplayer"}
-    for entity in entities:
-        for connection in entity.get("__connections__", []):
+    all_connection_sources = [(entity.get("targetname", ""), entity.get("__connections__", [])) for entity in entities]
+    all_connection_sources += [(item.get("targetname", ""), item.get("connections", [])) for item in model_prop_connections]
+    for source_name, source_connections in all_connection_sources:
+        for connection in source_connections:
             target = connection["target"].strip()
-            if target.lower() not in special_targets and target not in known_targets:
+            if target.lower() not in special_targets and target.casefold() not in known_targets:
                 unresolved_connections.append({
-                    "source_targetname": entity.get("targetname", ""),
+                    "source_targetname": source_name,
                     "output": connection["output"], "target": target,
                     "input": connection["input"],
                 })
     return {"entities": entities, "skipped_entities": skipped, "unsupported_properties": unsupported_properties,
             "unresolved_connections": unresolved_connections,
+            "model_prop_connections": model_prop_connections,
+            "model_prop_connection_count": sum(len(item.get("connections", [])) for item in model_prop_connections),
             "known_targetname_count": len(known_targets),
             "entity_count": len(entities),
-            "connection_count": sum(len(e.get("__connections__", [])) for e in entities)}
+            "connection_count": sum(len(e.get("__connections__", [])) for e in entities) + sum(len(item.get("connections", [])) for item in model_prop_connections)}
 
 def append_entity_blocks(vmf_path, entities: list[dict]) -> int:
     count = 0

@@ -453,12 +453,13 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                     )
                     if prop_entities:
                         if geometry_success and geometry_vmf is not None and geometry_vmf.is_file():
-                            append_vmf_entities(geometry_vmf, prop_entities)
+                            append_entity_blocks(geometry_vmf, prop_entities)
                             report.counts['model_prop_entities'] = report.counts.get('model_prop_entities', 0) + len(prop_entities)
                             progress(f'Appended {len(prop_entities)} compiled model prop entity/ies to {geometry_vmf.name}.')
                         else:
                             model_vmf = output_dir / (p.stem + '_model_entities.vmf')
-                            write_world_vmf(model_vmf, p.stem, [], prop_entities)
+                            write_world_vmf(model_vmf, p.stem, [], [])
+                            append_entity_blocks(model_vmf, prop_entities)
                             report.counts.setdefault('vmf_outputs', []).append(str(model_vmf))
                             report.counts['model_prop_entities'] = report.counts.get('model_prop_entities', 0) + len(prop_entities)
                             report.warnings.append(
@@ -483,6 +484,7 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                     entity_json.write_text(json.dumps(entity_result, indent=2), encoding='utf-8')
                     report.counts['entities_converted'] = entity_result.get('entity_count', 0)
                     report.counts['entity_io_connections'] = entity_result.get('connection_count', 0)
+                    report.counts['model_prop_io_connections'] = entity_result.get('model_prop_connection_count', 0)
                     report.counts['entities_skipped'] = len(entity_result.get('skipped_entities', []))
                     report.counts['entity_properties_unmapped'] = len(entity_result.get('unsupported_properties', []))
                     report.counts['entity_io_targets_unresolved'] = len(entity_result.get('unresolved_connections', []))

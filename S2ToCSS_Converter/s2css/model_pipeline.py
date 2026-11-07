@@ -355,5 +355,27 @@ def build_prop_entities(rows: Iterable[dict], compiled_models: dict, warnings: l
             channels = str(rendercolor).replace(",", " ").split()
             if len(channels) >= 3:
                 entity["rendercolor"] = " ".join(channels[:3])
+        # Preserve common Source 1 prop keyvalues that are otherwise lost when
+        # the Source 2 entity is replaced by a compiled CS:S model instance.
+        for key in ("targetname", "parentname", "spawnflags", "renderamt",
+                    "rendermode", "renderfx", "rendertocubemaps", "materialoverride"):
+            value = row.get(key)
+            if isinstance(value, bool):
+                entity[key] = "1" if value else "0"
+            elif isinstance(value, (str, int, float)) and str(value).strip():
+                entity[key] = str(value)
+        # Model props can be I/O targets too. Preserve their structured outputs
+        # and let the shared VMF entity writer serialize the connections block.
+        props = row.get("entity_properties")
+        node_attrs = row.get("entity_node_attributes")
+        if isinstance(props, dict) or isinstance(node_attrs, dict):
+            from .entity_conversion import _find_connections, _connection_fields
+            connection_source = {"entity_properties": props or {}, "entity_node_attributes": node_attrs or {}}
+            connections = []
+            for connection in _find_connections(connection_source):
+                parsed = _connection_fields(connection)
+                if parsed: connections.append(parsed)
+            if connections:
+                entity["__connections__"] = connections
         entities.append(entity)
     return entities

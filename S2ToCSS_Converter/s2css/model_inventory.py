@@ -58,8 +58,11 @@ def build_model_instance_inventory(vmap_inventory: dict) -> list[dict]:
         # The current VMAP schema stores the Hammer entity classname and model
         # path as ordinary properties on EditGameClassProps.
         props = properties if isinstance(properties, dict) else {}
-        entity_class = props.get("classname", "")
-        model_property = props.get("model", "")
+        prop_lookup = {str(key).lower(): value for key, value in props.items()}
+        def prop_value(*keys):
+            return next((prop_lookup[key.lower()] for key in keys if key.lower() in prop_lookup), "")
+        entity_class = prop_value("classname", "m_classname")
+        model_property = prop_value("model", "m_model")
         if not isinstance(model_property, str):
             model_property = ""
 
@@ -77,12 +80,20 @@ def build_model_instance_inventory(vmap_inventory: dict) -> list[dict]:
                 "origin": origin,
                 "angles": angles,
                 "scales": scales,
-                "skin": props.get("skin", ""),
-                "solid": props.get("solid", ""),
-                "rendercolor": props.get("rendercolor", ""),
-                "disableshadows": props.get("disableshadows", ""),
-                "rendertocubemaps": props.get("rendertocubemaps", ""),
-                "materialoverride": props.get("materialoverride", ""),
+                "entity_properties": props,
+                "entity_node_attributes": record.get("entity_node_attributes", {}),
+                "targetname": prop_value("targetname", "m_targetname", "name", "m_name"),
+                "parentname": prop_value("parentname", "m_parentname"),
+                "spawnflags": prop_value("spawnflags", "m_spawnflags"),
+                "skin": prop_value("skin", "m_skin"),
+                "solid": prop_value("solid", "m_solid"),
+                "rendercolor": prop_value("rendercolor", "m_rendercolor"),
+                "renderamt": prop_value("renderamt", "m_renderamt"),
+                "rendermode": prop_value("rendermode", "m_rendermode"),
+                "renderfx": prop_value("renderfx", "m_renderfx"),
+                "disableshadows": prop_value("disableshadows", "m_disableshadows"),
+                "rendertocubemaps": prop_value("rendertocubemaps", "m_rendertocubemaps"),
+                "materialoverride": prop_value("materialoverride", "m_materialoverride"),
                 "source1_model": "",
                 "mapping_status": "unmapped",
                 "notes": "Raw VMAP transform and entity properties preserved; Source 1 axis/angle conversion and model mapping are not yet validated.",
@@ -103,7 +114,8 @@ def write_model_instance_inventory(rows: Iterable[dict], output_dir: str | Path,
         "source_node_guid", "entity_properties_class", "source_entity_class",
         "source_model_property", "source_model", "origin_x", "origin_y", "origin_z",
         "pitch", "yaw", "roll", "scale_x", "scale_y", "scale_z", "skin", "solid",
-        "rendercolor", "disableshadows", "rendertocubemaps", "materialoverride",
+        "targetname", "parentname", "spawnflags", "rendercolor", "renderamt", "rendermode", "renderfx",
+        "disableshadows", "rendertocubemaps", "materialoverride",
         "source1_model", "mapping_status", "notes",
     ]
     vector_fields = {

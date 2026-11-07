@@ -71,6 +71,23 @@ class ModelPipelineTests(unittest.TestCase):
         self.assertEqual(entities[0]["skin"], "1")
         self.assertEqual(entities[0]["model"], "models/s2_import/crate_static.mdl")
 
+    def test_preserves_model_prop_targetname_and_io(self):
+        rows = [{
+            "source_model": "models/props/crate.vmdl",
+            "source_entity_class": "prop_static",
+            "element_index": 10,
+            "origin": [1, 2, 3], "angles": [0, 0, 0], "scales": [1, 1, 1],
+            "targetname": "crate_target",
+            "entity_properties": {
+                "classname": "prop_static", "targetname": "crate_target",
+                "connections": [{"output": "OnBreak", "target": "relay_a", "input": "Trigger"}],
+            },
+        }]
+        compiled = {"models/props/crate.vmdl": {"static": "models/s2_import/crate_static.mdl"}}
+        entities = build_prop_entities(rows, compiled, [])
+        self.assertEqual(entities[0]["targetname"], "crate_target")
+        self.assertEqual(entities[0]["__connections__"][0]["output"], "OnBreak")
+
     def test_dynamic_override_uses_dynamic_model_variant(self):
         rows = [{
             "source_model": "models/props/crate.vmdl",

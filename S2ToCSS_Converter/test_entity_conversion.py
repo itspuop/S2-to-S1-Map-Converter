@@ -37,7 +37,7 @@ class EntityConversionTests(unittest.TestCase):
     def test_does_not_emit_duplicate_worldspawn(self):
         result = build_entity_conversion([{
             "index": 2, "class": "CMapEntity",
-            "entity_properties": {"classname": "worldspawn", "skyname": "sky_day01_01"},
+            "entity_properties": {"classname": "worldspawn", "m_skyname": "sky_day01_01"},
         }])
         self.assertEqual(result["entity_count"], 0)
         self.assertEqual(result["worldspawn_properties"]["skyname"], "sky_day01_01")

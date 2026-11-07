@@ -1,5 +1,6 @@
 """Source 2 VMAP entity and I/O conversion helpers."""
 from __future__ import annotations
+from pathlib import Path
 from typing import Any
 
 _ALIASES = {
@@ -8,6 +9,11 @@ _ALIASES = {
     "m_model": "model", "m_parentname": "parentname",
     "m_rendercolor": "rendercolor", "m_renderamt": "renderamt",
     "m_spawnflags": "spawnflags", "m_startdisabled": "StartDisabled", "m_flstartdisabled": "StartDisabled",
+    "m_rendermode": "rendermode", "m_renderfx": "renderfx",
+    "m_disableshadows": "disableshadows", "m_rendertocubemaps": "rendertocubemaps",
+    "m_materialoverride": "materialoverride", "m_solid": "solid", "m_skin": "skin",
+    "m_skyname": "skyname", "m_detailmaterial": "detailmaterial",
+    "m_detailvbsp": "detailvbsp", "m_maxpropscreenwidth": "maxpropscreenwidth",
 }
 _SKIP = {"classname", "m_editoronly", "editoronly", "m_editorclass", "m_classname",
          "m_connections", "connections", "outputs", "outputconnections",

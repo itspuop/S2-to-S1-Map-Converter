@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 
-_MODEL_SUFFIX = re.compile(r"(?i)\\.vmdl(?:_c)?$")
+_MODEL_SUFFIX = re.compile(r"(?i)\.vmdl(?:_c)?$")
 
 
 def _find_model_paths(value: Any) -> list[str]:
@@ -25,12 +25,12 @@ def _find_model_paths(value: Any) -> list[str]:
         for child in value:
             found.update(_find_model_paths(child))
     elif isinstance(value, str):
-        normalized = value.strip().replace("\\\\", "/")
+        normalized = value.strip().replace("\\", "/")
         for match in re.findall(
-            r"(?i)(?:[a-z0-9_ .()\\-]+/)*[a-z0-9_ .()\\-]+\\.vmdl(?:_c)?",
+            r"(?i)(?:[a-z0-9_ .()\-]+/)*[a-z0-9_ .()\-]+\.vmdl(?:_c)?",
             normalized,
         ):
-            path = match.strip().strip('"').replace("\\\\", "/")
+            path = match.strip().strip('"').replace("\\", "/")
             if _MODEL_SUFFIX.search(path):
                 found.add(path)
     return sorted(found, key=str.lower)

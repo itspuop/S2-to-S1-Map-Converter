@@ -68,10 +68,11 @@ class EntityConversionTests(unittest.TestCase):
         records = [
             {"index": 1, "class": "CMapEntity", "entity_properties": {"classname": "cs2_only_thing"}},
             {"index": 2, "class": "CMapEntity", "entity_properties": {"classname": "prop_static", "model": "models/a.vmdl", "targetname": "prop_a", "connections": [{"output": "OnBreak", "target": "relay_a", "input": "Trigger"}]}},
+            {"index": 3, "class": "CMapEntity", "entity_properties": {"classname": "func_brush", "model": "models/brush.vmdl"}},
         ]
         result = build_entity_conversion(records)
         self.assertEqual(result["entity_count"], 0)
-        self.assertEqual(len(result["skipped_entities"]), 1)
+        self.assertEqual(len(result["skipped_entities"]), 2)
         self.assertEqual(result["model_prop_connection_count"], 1)
         self.assertEqual(len(result["unresolved_connections"]), 1)
 

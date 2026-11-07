@@ -9,7 +9,7 @@ _ALIASES = {
     "m_origin": "origin", "m_angles": "angles", "m_classname": "classname",
     "m_model": "model", "m_parentname": "parentname",
     "m_rendercolor": "rendercolor", "m_renderamt": "renderamt",
-    "m_spawnflags": "spawnflags", "m_startdisabled": "StartDisabled", "m_flstartdisabled": "StartDisabled",
+    "m_spawnflags": "spawnflags", "m_startdisabled": "StartDisabled", "m_flstartdisabled": "StartDisabled", "m_bstartdisabled": "StartDisabled",
     "m_rendermode": "rendermode", "m_renderfx": "renderfx",
     "m_disableshadows": "disableshadows", "m_rendertocubemaps": "rendertocubemaps",
     "m_materialoverride": "materialoverride", "m_solid": "solid", "m_skin": "skin",
@@ -163,6 +163,10 @@ def build_entity_conversion(records: list[dict]) -> dict:
                     "targetname": lowered_props.get("targetname", lowered_props.get("m_targetname", lowered_props.get("m_name", ""))),
                     "connections": prop_connections,
                 })
+            continue
+        if _find_model_value(props):
+            skipped.append({"element_index": record.get("index"), "classname": classname,
+                            "reason": "Source 2 model-backed non-prop entity requires a dedicated brush/model conversion."})
             continue
         keys = {"id": str(2000000 + int(record.get("index") or 0)), "classname": classname}
         if record.get("origin") is not None: keys["origin"] = _scalar(record["origin"]) or ""

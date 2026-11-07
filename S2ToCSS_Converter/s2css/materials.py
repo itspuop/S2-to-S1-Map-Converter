@@ -84,42 +84,6 @@ _SCALAR_KEYS = {
 _BOOL_KEYS = {"g_balphatest": "$alphatest", "g_btranslucent": "$translucent",
               "g_bselfillum": "$selfillum", "g_bphong": "$phong"}
 
-def _unquote(value: str) -> str:
-    if len(value) >= 2 and value[0] == value[-1] == '"':
-        return value[1:-1]
-    return value
-
-def parse_keyvalues(text: str) -> dict[str, Any]:
-    tokens = [_unquote(t) for t in _TOKEN.findall(text)
-              if not t.startswith("//") and not t.startswith("/*")]
-    pos = 0
-    def block(expect_close: bool = False) -> dict[str, Any]:
-        nonlocal pos
-        result: dict[str, Any] = {}
-        while pos < len(tokens):
-            token = tokens[pos]
-            if token == "}":
-                if not expect_close: raise ValueError("Unexpected closing brace")
-                pos += 1
-                return result
-            if token == "{": raise ValueError("Unexpected opening brace without a key")
-            key = token
-            pos += 1
-            if pos >= len(tokens): break
-            if tokens[pos] == "{":
-                pos += 1
-                value = block(True)
-            else:
-                value = tokens[pos]
-                pos += 1
-            if key in result:
-                if not isinstance(result[key], list): result[key] = [result[key]]
-                result[key].append(value)
-            else: result[key] = value
-        if expect_close: raise ValueError("Unclosed block")
-        return result
-    return block()
-
 def _walk(value: Any, prefix: str = ""):
     if isinstance(value, dict):
         for key, child in value.items():

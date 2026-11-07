@@ -341,8 +341,8 @@ def build_prop_entities(rows: Iterable[dict], compiled_models: dict, warnings: l
             "origin": " ".join(f"{v:.6g}" for v in xyz),
             "angles": " ".join(f"{v:.6g}" for v in pyr),
             "model": model,
-            "solid": str(row.get("solid") or "6"),
-            "disableshadows": str(row.get("disableshadows") or "0"),
+            "solid": str(row.get("solid") if row.get("solid") not in (None, "") else "6"),
+            "disableshadows": ("1" if row.get("disableshadows") is True else "0" if row.get("disableshadows") is False else str(row.get("disableshadows") or "0")),
         }
         skin = row.get("skin")
         if skin not in (None, ""):

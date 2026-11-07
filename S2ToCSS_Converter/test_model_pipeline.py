@@ -10,6 +10,8 @@ from s2css.model_pipeline import (
     write_qc,
 )
 
+from s2css.blender_export import normalize_smd_material_paths
+
 
 class ModelPipelineTests(unittest.TestCase):
     def test_resolves_exact_relative_dmx_before_fbx(self):
@@ -91,7 +93,7 @@ class ModelPipelineTests(unittest.TestCase):
             "source_entity_class": "prop_static",
             "element_index": 10,
             "origin": [1, 2, 3], "angles": [0, 0, 0], "scales": [1, 1, 1],
-            "targetname": "crate_target", "rendercolor": [255, 128, 0],
+            "targetname": "crate_target", "rendercolor": [255, 128, 0], "disableshadows": True, "solid": 0,
             "entity_properties": {
                 "classname": "prop_static", "targetname": "crate_target",
                 "connections": [{"output": "OnBreak", "target": "relay_a", "input": "Trigger"}],
@@ -101,6 +103,8 @@ class ModelPipelineTests(unittest.TestCase):
         entities = build_prop_entities(rows, compiled, [])
         self.assertEqual(entities[0]["targetname"], "crate_target")
         self.assertEqual(entities[0]["rendercolor"], "255 128 0")
+        self.assertEqual(entities[0]["disableshadows"], "1")
+        self.assertEqual(entities[0]["solid"], "0")
         self.assertEqual(entities[0]["__connections__"][0]["output"], "OnBreak")
 
     def test_dynamic_override_uses_dynamic_model_variant(self):

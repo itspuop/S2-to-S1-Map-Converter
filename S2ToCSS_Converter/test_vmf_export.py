@@ -33,7 +33,7 @@ class VmfExportTests(unittest.TestCase):
             self.assertIn('"classname" "worldspawn"', vmf)
             self.assertIn('"plane" "(99 201 301)', vmf)
             self.assertEqual(vmf.count('  side\n  {'), 6)
-            self.assertLess(vmf.index('world\n{'), vmf.index('solid\n{'))
+            self.assertLess(vmf.index('world\n{'), vmf.index(' solid\n {'))
             self.assertTrue(vmf.rstrip().endswith("}"))
 
     def test_open_mesh_is_rejected(self):

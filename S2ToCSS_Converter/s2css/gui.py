@@ -49,7 +49,9 @@ class App:
         p=filedialog.askdirectory(parent=self.root,title='Select project folder containing editable VMAPs and associated assets',mustexist=True)
         if p:
             self.src.set(p)
-            materials=Path(p)/'materials'
+            selected=Path(p)
+            root=selected.parent if selected.name.lower() in {'maps','models','materials'} else selected
+            materials=root/'materials'
             if materials.is_dir(): self.materials_root.set(str(materials))
     def pick_output(self):
         p=filedialog.askdirectory(parent=self.root,title='Select output folder',mustexist=False)

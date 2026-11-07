@@ -1,6 +1,6 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from s2css.core import detect_kind, write_world_vmf, scan_vmap_text, run_conversion, project_root_for_map
+from s2css.core import detect_kind, write_world_vmf, scan_vmap_text, run_conversion, project_root_for_map, project_root_for_input
 
 def test_detect():
     assert detect_kind(Path('x.vmap')) == 'editable_vmap'
@@ -17,6 +17,14 @@ def test_project_root_resolution():
         vmap = maps / 'surf_test.vmap'
         vmap.write_bytes(b'')
         assert project_root_for_map(vmap) == addon
+
+def test_project_root_resolution_from_maps_folder():
+    with TemporaryDirectory() as d:
+        addon = Path(d) / 'test_addon'
+        maps = addon / 'maps'
+        (addon / 'materials').mkdir(parents=True)
+        maps.mkdir(parents=True)
+        assert project_root_for_input(maps) == addon
 
 def test_vmf():
     with TemporaryDirectory() as d:
@@ -44,4 +52,4 @@ def test_binary_vmap_inventory():
         assert 'not decoded' in inv['note']
 
 if __name__=='__main__':
-    test_detect(); test_project_root_resolution(); test_vmf(); test_binary_vmap_inventory(); test_no_viewer_dependency(); print('Smoke tests passed')
+    test_detect(); test_project_root_resolution(); test_project_root_resolution_from_maps_folder(); test_vmf(); test_binary_vmap_inventory(); test_no_viewer_dependency(); print('Smoke tests passed')

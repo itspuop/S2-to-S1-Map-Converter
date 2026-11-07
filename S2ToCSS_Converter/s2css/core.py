@@ -35,6 +35,15 @@ def project_root_for_map(map_path: Path) -> Path:
     return parent
 
 
+def project_root_for_input(input_path: Path) -> Path:
+    """Resolve the addon root when a user selects the maps/, models/, or materials/ subfolder."""
+    if input_path.is_dir() and input_path.name.lower() in {'maps', 'models', 'materials'}:
+        parent = input_path.parent
+        if (parent / 'materials').is_dir() or (parent / 'models').is_dir() or (parent / 'maps').is_dir():
+            return parent
+    return project_root_for_map(input_path)
+
+
 def discover_inputs(path: Path):
     if path.is_file(): return [path]
     exts={'.vmap','.vmap_c','.obj','.gltf','.glb','.ply','.stl'}
@@ -375,7 +384,7 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                     report.counts['model_instances_found'] = report.counts.get('model_instances_found', 0) + len(model_rows)
                     report.counts.setdefault('model_instance_inventories', []).extend([str(model_json), str(model_csv)])
                     progress(f'Model inventory complete: {len(model_rows)} model-backed entity instance(s) identified.')
-                    model_root = input_path if input_path.is_dir() else project_root_for_map(p)
+                    model_root = project_root_for_input(input_path) if input_path.is_dir() else project_root_for_map(p)
                     progress('Resolving editable FBX/DMX sources and running the optional Blender/studiomdl model pipeline…')
                     model_result = process_model_instances(
                         model_root, model_rows, output_dir, toolchain=toolchain or {}, progress=progress,
@@ -438,7 +447,7 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
         except Exception as ex:
             report.errors.append(f'{p}: {ex}')
     # Loose raster textures can be converted when the user selected a directory.
-    project_root = input_path if input_path.is_dir() else project_root_for_map(input_path)
+    project_root = project_root_for_input(input_path)
     configured_materials = (Path(toolchain.get('materials_root')).expanduser()
                             if toolchain and toolchain.get('materials_root') else None)
     default_materials = project_root / 'materials'

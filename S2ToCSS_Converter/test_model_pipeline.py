@@ -50,6 +50,7 @@ class ModelPipelineTests(unittest.TestCase):
             text = qc.read_text(encoding="utf-8")
             self.assertIn('$modelname "models/s2_import/crate_static.mdl"', text)
             self.assertIn("$staticprop", text)
+            self.assertIn('$cdmaterials "s2_import"', text)
             self.assertIn('$collisionmodel "crate.smd"', text)
 
     def test_builds_entity_only_for_compiled_model_with_unit_scale(self):

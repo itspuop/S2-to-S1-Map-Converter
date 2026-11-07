@@ -494,7 +494,8 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                             sorted(model_material_refs), materials_root,
                             output_dir / 'materials' / 's2_import',
                             vtfcmd or (toolchain or {}).get('vtfcmd', ''),
-                            search_roots=model_search_roots
+                            search_roots=model_search_roots,
+                            brush_material=False
                         )
                         model_material_report = output_dir / (p.stem + '_model_material_conversion.json')
                         model_material_report.write_text(json.dumps(model_material_result, indent=2), encoding='utf-8')

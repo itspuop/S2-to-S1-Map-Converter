@@ -74,6 +74,23 @@ class MaterialConversionTests(unittest.TestCase):
             self.assertTrue((out / "props" / "stone.vmt").is_file())
             self.assertTrue((out / "props" / "stone_color.tga").is_file())
 
+    def test_model_materials_use_vertexlitgeneric(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "materials"
+            out = Path(tmp) / "out" / "materials" / "s2_import"
+            (root / "models").mkdir(parents=True)
+            (root / "models" / "crate.vmat").write_text(
+                '{ m_shaderName = "csgo_complex.vfx" m_textureParams = [ '
+                '{ m_name = "g_tColor" m_pValue = resource:"materials/models/crate.png" } ] }',
+                encoding="utf-8",
+            )
+            (root / "models" / "crate.png").write_bytes(b"image")
+            result = convert_vmat_references(
+                ["materials/models/crate.vmat"], root, out, brush_material=False
+            )
+            self.assertEqual(result["converted_count"], 1)
+            self.assertTrue((out / "models" / "crate.vmt").read_text(encoding="utf-8").startswith('"VertexLitGeneric"'))
+
     def test_resolves_shared_content_vmat_and_texture_roots(self):
         with TemporaryDirectory() as tmp:
             addon_root = Path(tmp) / "addon_materials"

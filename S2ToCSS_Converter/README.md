@@ -39,6 +39,29 @@ Use the editable .vmap, not .vmap_c. The JSON may contain a lot of mesh attribut
 
 Python 3.10+ is recommended. The core DMX inventory and schema inspector use the Python standard library.
 
+## Model support: first implementation stage
+
+The model-instance inventory is now integrated into editable VMAP scans. For each
+binary DMX v9 map, the converter inspects resolved `CMapEntity` entity properties
+for `.vmdl` / `.vmdl_c` references and writes:
+
+- `<map>_model_instances.json`: structured model references and placement records.
+- `<map>_model_instances.csv`: spreadsheet-friendly placement list with origin,
+  pitch/yaw/roll, scale, source node identity, and an explicit unmapped status.
+
+This is an inventory/handoff stage only. It does not yet create Source 1
+`prop_static` entities or compile MDLs. Transform values are preserved exactly
+as decoded from the VMAP; coordinate/angle conversion must be validated against
+a real map before they are emitted into a playable VMF. The next stage is to
+associate these records with manually exported Source 1 model assets and then
+generate VMF entities only for verified mappings.
+
+Run the regression tests with:
+
+```bat
+py -m unittest test_model_inventory.py
+```
+
 ## Current limitations
 
 This branch does **not** yet create a playable CS:S map directly from VMAP. Native mesh schema inspection is the first verification step toward vertex-stream decoding, polygon reconstruction, transform composition, closed-solid/convexity checks, and VMF generation. Complex meshes will continue to be flagged for the manual model workflow discussed for this project. Source 2 materials, model compilation, entity/I/O conversion, and full texture translation also remain future work.

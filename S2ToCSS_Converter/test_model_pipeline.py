@@ -105,7 +105,7 @@ class ModelPipelineTests(unittest.TestCase):
             "source_entity_class": "prop_static",
             "element_index": 10,
             "origin": [1, 2, 3], "angles": [0, 0, 0], "scales": [1, 1, 1],
-            "targetname": "crate_target", "rendercolor": [255, 128, 0], "disableshadows": True, "solid": 0,
+            "targetname": "crate_target", "rendercolor": [255, 128, 0], "disableshadows": True, "solid": 0, "materialoverride": "materials/models/props/alt.vmat",
             "entity_properties": {
                 "classname": "prop_static", "targetname": "crate_target",
                 "connections": [{"output": "OnBreak", "target": "relay_a", "input": "Trigger"}],
@@ -117,6 +117,7 @@ class ModelPipelineTests(unittest.TestCase):
         self.assertEqual(entities[0]["rendercolor"], "255 128 0")
         self.assertEqual(entities[0]["disableshadows"], "1")
         self.assertEqual(entities[0]["solid"], "0")
+        self.assertEqual(entities[0]["materialoverride"], "s2_import/models/props/alt")
         self.assertEqual(entities[0]["__connections__"][0]["output"], "OnBreak")
 
     def test_dynamic_override_uses_dynamic_model_variant(self):

@@ -214,9 +214,12 @@ def append_worldspawn_properties(vmf_path, properties: dict) -> int:
     for index in range(opening, len(text)):
         char = text[index]
         if in_string:
-            if escaped: escaped = False
-            elif char == "\\": escaped = True
-            elif char == '"': in_string = False
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
             continue
         if char == '"':
             in_string = True
@@ -235,28 +238,9 @@ def append_worldspawn_properties(vmf_path, properties: dict) -> int:
         safe_key = str(key).replace('"', '\\"')
         safe_value = str(value).replace("\\", "/").replace('"', '\\"').replace("\n", " ")
         pattern = re.compile(r'(?m)^(\s*)"' + re.escape(safe_key) + r'"\s+"[^"]*"\s*$')
-    with open(vmf_path, "a", encoding="utf-8", newline="\n") as handle:
-        for entity in entities:
-            connections = entity.get("__connections__", [])
-            handle.write("entity\n{\n")
-            for key, value in entity.items():
-                if key == "__connections__": continue
-                escaped_key = str(key).replace('"', '\\"')
-                escaped_value = str(value).replace('"', '\\"')
-                handle.write(f' "{escaped_key}" "{escaped_value}"\n')
-            if connections:
-                handle.write(" connections\n {\n")
-                for c in connections:
-                    value = ",".join((c["target"], c["input"], c["parameter"], c["delay"], c["times"]))
-                    handle.write(f'  "{c["output"]}" "{value}"\n')
-                handle.write(" }\n")
-            handle.write("}\n")
-            count += 1
-    return count
-)
         replacement = f'    "{safe_key}" "{safe_value}"'
         if pattern.search(block):
-            block = pattern.sub(replacement, block, count=1)
+            block = pattern.sub(lambda _match: replacement, block, count=1)
         else:
             block += f'\n{replacement}\n'
         changed += 1
@@ -271,15 +255,19 @@ def append_entity_blocks(vmf_path, entities: list[dict]) -> int:
             connections = entity.get("__connections__", [])
             handle.write("entity\n{\n")
             for key, value in entity.items():
-                if key == "__connections__": continue
+                if key == "__connections__":
+                    continue
                 escaped_key = str(key).replace('"', '\\"')
-                escaped_value = str(value).replace('"', '\\"')
+                escaped_value = str(value).replace("\\", "/").replace('"', '\\"').replace("\n", " ")
                 handle.write(f' "{escaped_key}" "{escaped_value}"\n')
             if connections:
                 handle.write(" connections\n {\n")
-                for c in connections:
-                    value = ",".join((c["target"], c["input"], c["parameter"], c["delay"], c["times"]))
-                    handle.write(f'  "{c["output"]}" "{value}"\n')
+                for connection in connections:
+                    value = ",".join((
+                        connection["target"], connection["input"], connection["parameter"],
+                        connection["delay"], connection["times"],
+                    ))
+                    handle.write(f'  "{connection["output"]}" "{value}"\n')
                 handle.write(" }\n")
             handle.write("}\n")
             count += 1

@@ -385,7 +385,19 @@ def build_prop_entities(rows: Iterable[dict], compiled_models: dict, warnings: l
             if isinstance(value, bool):
                 entity[key] = "1" if value else "0"
             elif isinstance(value, (str, int, float)) and str(value).strip():
-                entity[key] = str(value)
+                rendered = str(value)
+                if key == "materialoverride" and ".vmat" in rendered.lower():
+                    material_path = rendered.replace(chr(92), "/").lstrip("/")
+                    if material_path.lower().startswith("materials/"):
+                        material_path = material_path[10:]
+                    for suffix in (".vmat_c", ".vmat", ".vmt"):
+                        if material_path.lower().endswith(suffix):
+                            material_path = material_path[:-len(suffix)]
+                            break
+                    if not material_path.lower().startswith("s2_import/"):
+                        material_path = "s2_import/" + material_path
+                    rendered = material_path
+                entity[key] = rendered
         # Model props can be I/O targets too. Preserve their structured outputs
         # and let the shared VMF entity writer serialize the connections block.
         props = row.get("entity_properties")

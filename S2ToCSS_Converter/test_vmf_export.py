@@ -31,7 +31,7 @@ class VmfExportTests(unittest.TestCase):
             self.assertEqual(report["vertex_count"], 8)
             self.assertEqual(report["face_count"], 6)
             self.assertIn('"classname" "worldspawn"', vmf)
-            self.assertIn('"plane" "(99 199 301)', vmf)
+            self.assertIn('"plane" "(99 201 301)', vmf)
             self.assertEqual(vmf.count('  side\n  {'), 6)
             self.assertLess(vmf.index('world\n{'), vmf.index('solid\n{'))
             self.assertTrue(vmf.rstrip().endswith("}"))

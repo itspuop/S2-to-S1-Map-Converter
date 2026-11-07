@@ -14,7 +14,7 @@ _SKIP = {"classname", "m_editoronly", "editoronly", "m_editorclass", "m_classnam
          "m_entityname", "m_entityid", "m_entityproperties"}
 _ALLOWED_PREFIXES = ("logic_", "trigger_", "func_", "info_", "point_", "env_",
                      "filter_", "path_", "move_", "game_", "npc_", "weapon_", "light_", "prop_")
-_ALLOWED_EXACT = {"light", "worldspawn", "ambient_generic", "prop_detail",
+_ALLOWED_EXACT = {"light", "ambient_generic", "prop_detail",
                   "prop_static", "prop_dynamic", "prop_dynamic_override",
                   "prop_physics", "prop_physics_override", "prop_physics_multiplayer"}
 
@@ -131,6 +131,10 @@ def build_entity_conversion(records: list[dict]) -> dict:
         raw_class = lowered_props.get("classname", lowered_props.get("m_classname", ""))
         classname = str(raw_class).strip().lower()
         if not classname: continue
+        if classname == "worldspawn":
+            skipped.append({"element_index": record.get("index"), "classname": classname,
+                            "reason": "worldspawn is emitted by the VMF writer; global world keyvalues are not yet merged."})
+            continue
         if not (classname in _ALLOWED_EXACT or classname.startswith(_ALLOWED_PREFIXES)):
             skipped.append({"element_index": record.get("index"), "classname": classname,
                             "reason": "Class is not in the conservative Source 1 passthrough allowlist."})

@@ -34,6 +34,14 @@ class EntityConversionTests(unittest.TestCase):
             self.assertIn('"targetname" "relay_start"', text)
             self.assertIn('"OnTrigger" "door_1,Open,,0.25,-1"', text)
 
+    def test_does_not_emit_duplicate_worldspawn(self):
+        result = build_entity_conversion([{
+            "index": 2, "class": "CMapEntity",
+            "entity_properties": {"classname": "worldspawn", "skyname": "sky_day01_01"},
+        }])
+        self.assertEqual(result["entity_count"], 0)
+        self.assertEqual(result["skipped_entities"][0]["classname"], "worldspawn")
+
     def test_parses_legacy_output_key_to_connection_string(self):
         records = [{
             "index": 15, "class": "CMapEntity",

@@ -107,6 +107,7 @@ def _find_model_value(props: dict) -> bool:
 
 def build_entity_conversion(records: list[dict]) -> dict:
     entities, skipped, unsupported_properties, model_prop_connections = [], [], [], []
+    worldspawn_properties = {}
     known_targets = set()
     for record in records:
         if record.get("class") != "CMapEntity": continue
@@ -132,8 +133,13 @@ def build_entity_conversion(records: list[dict]) -> dict:
         classname = str(raw_class).strip().lower()
         if not classname: continue
         if classname == "worldspawn":
-            skipped.append({"element_index": record.get("index"), "classname": classname,
-                            "reason": "worldspawn is emitted by the VMF writer; global world keyvalues are not yet merged."})
+            for key, value in props.items():
+                normalized = _norm_key(str(key))
+                if str(key).lower() in _SKIP or normalized.lower() in _SKIP:
+                    continue
+                scalar = _scalar(value)
+                if scalar is not None and normalized.lower() not in {"id", "classname"}:
+                    worldspawn_properties[normalized] = scalar
             continue
         if not (classname in _ALLOWED_EXACT or classname.startswith(_ALLOWED_PREFIXES)):
             skipped.append({"element_index": record.get("index"), "classname": classname,
@@ -185,11 +191,78 @@ def build_entity_conversion(records: list[dict]) -> dict:
                 })
     return {"entities": entities, "skipped_entities": skipped, "unsupported_properties": unsupported_properties,
             "unresolved_connections": unresolved_connections,
+            "worldspawn_properties": worldspawn_properties,
             "model_prop_connections": model_prop_connections,
             "model_prop_connection_count": sum(len(item.get("connections", [])) for item in model_prop_connections),
             "known_targetname_count": len(known_targets),
             "entity_count": len(entities),
             "connection_count": sum(len(e.get("__connections__", [])) for e in entities) + sum(len(item.get("connections", [])) for item in model_prop_connections)}
+
+def append_worldspawn_properties(vmf_path, properties: dict) -> int:
+    """Merge safe Source 1 worldspawn keyvalues into the VMF's existing world block."""
+    if not properties:
+        return 0
+    path = Path(vmf_path)
+    text = path.read_text(encoding="utf-8", errors="replace")
+    match = re.search(r"(?m)^world\s*$", text)
+    if not match:
+        return 0
+    opening = text.find("{", match.end())
+    if opening < 0:
+        return 0
+    depth, in_string, escaped, closing = 0, False, False, -1
+    for index in range(opening, len(text)):
+        char = text[index]
+        if in_string:
+            if escaped: escaped = False
+            elif char == "\\": escaped = True
+            elif char == '"': in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                closing = index
+                break
+    if closing < 0:
+        return 0
+    block = text[opening + 1:closing]
+    changed = 0
+    for key, value in properties.items():
+        safe_key = str(key).replace('"', '\\"')
+        safe_value = str(value).replace("\\", "/").replace('"', '\\"').replace("\n", " ")
+        pattern = re.compile(r'(?m)^(\s*)"' + re.escape(safe_key) + r'"\s+"[^"]*"\s*$')
+    with open(vmf_path, "a", encoding="utf-8", newline="\n") as handle:
+        for entity in entities:
+            connections = entity.get("__connections__", [])
+            handle.write("entity\n{\n")
+            for key, value in entity.items():
+                if key == "__connections__": continue
+                escaped_key = str(key).replace('"', '\\"')
+                escaped_value = str(value).replace('"', '\\"')
+                handle.write(f' "{escaped_key}" "{escaped_value}"\n')
+            if connections:
+                handle.write(" connections\n {\n")
+                for c in connections:
+                    value = ",".join((c["target"], c["input"], c["parameter"], c["delay"], c["times"]))
+                    handle.write(f'  "{c["output"]}" "{value}"\n')
+                handle.write(" }\n")
+            handle.write("}\n")
+            count += 1
+    return count
+)
+        replacement = f'    "{safe_key}" "{safe_value}"'
+        if pattern.search(block):
+            block = pattern.sub(replacement, block, count=1)
+        else:
+            block += f'\n{replacement}\n'
+        changed += 1
+    path.write_text(text[:opening + 1] + block + text[closing:], encoding="utf-8")
+    return changed
+
 
 def append_entity_blocks(vmf_path, entities: list[dict]) -> int:
     count = 0

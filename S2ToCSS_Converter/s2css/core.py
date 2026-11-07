@@ -13,7 +13,7 @@ from .model_inventory import build_model_instance_inventory, write_model_instanc
 from .model_pipeline import process_model_instances, build_prop_entities, extract_smd_material_names
 from .vmap_export import export_vmap_to_vmf
 from .materials import convert_vmat_references, scan_dmx_material_references, collect_vmat_references, stage_materials_to_game
-from .entity_conversion import build_entity_conversion, append_entity_blocks
+from .entity_conversion import build_entity_conversion, append_entity_blocks, append_worldspawn_properties
 
 @dataclass
 class Report:
@@ -613,14 +613,19 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                             f"{len(entity_result['skipped_entities'])} entity class(es) were not emitted; see {entity_json.name}."
                         )
                     converted_entities = entity_result.get('entities', [])
-                    if converted_entities:
+                    worldspawn_properties = entity_result.get('worldspawn_properties', {})
+                    if converted_entities or worldspawn_properties:
                         entity_target = geometry_vmf if geometry_success and geometry_vmf and geometry_vmf.is_file() else output_dir / (p.stem + '_entities.vmf')
                         if entity_target != geometry_vmf and not entity_target.exists():
                             write_world_vmf(entity_target, p.stem, [], [])
-                        appended = append_entity_blocks(entity_target, converted_entities)
-                        report.counts['entities_written_to_vmf'] = appended
+                        if worldspawn_properties:
+                            merged_world_keys = append_worldspawn_properties(entity_target, worldspawn_properties)
+                            report.counts['worldspawn_keyvalues_merged'] = merged_world_keys
+                        if converted_entities:
+                            appended = append_entity_blocks(entity_target, converted_entities)
+                            report.counts['entities_written_to_vmf'] = appended
                         report.counts.setdefault('vmf_outputs', []).append(str(entity_target)) if str(entity_target) not in report.counts.get('vmf_outputs', []) else None
-                        progress(f'Wrote {appended} Source 1 entity/entities and {entity_result.get("connection_count", 0)} I/O connection(s).')
+                        progress(f'Wrote {len(converted_entities)} Source 1 entity/entities, {entity_result.get("connection_count", 0)} I/O connection(s), and {len(worldspawn_properties)} worldspawn keyvalue(s).')
                     progress(f'DMX parse complete: {inv.get("dmx_element_count",0)} elements; {inv.get("dmx_transform_record_count",0)} transform records.')
             elif kind=='compiled_vmap':
                 report.warnings.append(f'{p.name}: compiled VMAP detected. This converter does not require compiled maps; select the editable .vmap and its associated assets for native parsing.')

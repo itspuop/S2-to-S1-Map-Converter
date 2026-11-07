@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from s2css.entity_conversion import build_entity_conversion, append_entity_blocks
+from s2css.entity_conversion import build_entity_conversion, append_entity_blocks, append_worldspawn_properties
 
 class EntityConversionTests(unittest.TestCase):
     def test_converts_logic_entity_and_structured_output(self):
@@ -40,7 +40,17 @@ class EntityConversionTests(unittest.TestCase):
             "entity_properties": {"classname": "worldspawn", "skyname": "sky_day01_01"},
         }])
         self.assertEqual(result["entity_count"], 0)
-        self.assertEqual(result["skipped_entities"][0]["classname"], "worldspawn")
+        self.assertEqual(result["worldspawn_properties"]["skyname"], "sky_day01_01")
+
+    def test_merges_worldspawn_keyvalues_into_existing_world_block(self):
+        with TemporaryDirectory() as tmp:
+            vmf = Path(tmp) / "world.vmf"
+            vmf.write_text('world\n{\n "id" "1"\n "classname" "worldspawn"\n}\n', encoding="utf-8")
+            count = append_worldspawn_properties(vmf, {"skyname": "sky_day01_01", "maxpropscreenwidth": "-1"})
+            self.assertEqual(count, 2)
+            text = vmf.read_text(encoding="utf-8")
+            self.assertIn('"skyname" "sky_day01_01"', text)
+            self.assertIn('"maxpropscreenwidth" "-1"', text)
 
     def test_parses_legacy_output_key_to_connection_string(self):
         records = [{

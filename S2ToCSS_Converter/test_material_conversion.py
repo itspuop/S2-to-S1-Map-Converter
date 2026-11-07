@@ -2,9 +2,19 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from s2css.materials import parse_keyvalues, convert_vmat_references
+from s2css.materials import parse_keyvalues, convert_vmat_references, collect_vmat_references
 
 class MaterialConversionTests(unittest.TestCase):
+    def test_collects_nested_dmx_material_paths(self):
+        refs = collect_vmat_references({
+            "name": r"materials\models\corals\coral.vmat",
+            "nested": [{"material": "materials/props/metal.vmat"}, "not_a_material.png"],
+        })
+        self.assertEqual(refs, [
+            "materials/models/corals/coral.vmat",
+            "materials/props/metal.vmat",
+        ])
+
     def test_parses_nested_vmat_and_ignores_kv3_header(self):
         tree = parse_keyvalues('<!-- kv3 encoding:text:version{...} -->\n"Layer0" { "shader" "csgo_complex.vfx" "TextureColor" { "g_tColor" "materials/test/color.vtex" } }')
         self.assertEqual(tree["Layer0"]["shader"], "csgo_complex.vfx")

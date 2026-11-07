@@ -12,7 +12,7 @@ from .dmx_binary import parse_binary_v9, summarize_graph, extract_transform_reco
 from .model_inventory import build_model_instance_inventory, write_model_instance_inventory
 from .model_pipeline import process_model_instances, build_prop_entities
 from .vmap_export import export_vmap_to_vmf
-from .materials import convert_vmat_references
+from .materials import convert_vmat_references, scan_dmx_material_references, collect_vmat_references
 from .entity_conversion import build_entity_conversion, append_entity_blocks
 
 @dataclass
@@ -345,12 +345,13 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                 report.counts.setdefault('vmap_inventory_files', []).append(str(invpath))
                 geometry_vmf = None
                 geometry_success = False
+                material_scan = {}
+                materials_root = (Path(toolchain.get('materials_root')).expanduser()
+                                  if toolchain and toolchain.get('materials_root') else None)
                 if inv.get('dmx_parsed'):
                     try:
                         geometry_vmf = output_dir / (p.stem + '_brushes.vmf')
                         geometry_report = output_dir / (p.stem + '_brushes_report.json')
-                        materials_root = (Path(toolchain.get('materials_root')).expanduser()
-                                          if toolchain and toolchain.get('materials_root') else None)
                         material_map_path = (Path(toolchain.get('material_map')).expanduser()
                                              if toolchain and toolchain.get('material_map') else None)
                         progress('Decoding CMapMesh topology and exporting validated convex VMF brushes…')
@@ -455,6 +456,39 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                         model_root, model_rows, output_dir, toolchain=toolchain or {}, progress=progress,
                         manifest_name=p.stem + '_model_pipeline_manifest.json'
                     )
+                    # Model DMX files can reference their own VMATs independently of the map's world meshes.
+                    model_material_refs = set()
+                    for model_row in model_rows:
+                        model_material_refs.update(collect_vmat_references(model_row.get('materialoverride', '')))
+                    for entity_record in inv.get('dmx_transform_records', []):
+                        model_material_refs.update(collect_vmat_references(entity_record.get('entity_properties', {})))
+                    for model_record in model_result.get('models', []):
+                        source_file = model_record.get('source_file')
+                        if source_file and Path(source_file).suffix.lower() == '.dmx' and Path(source_file).is_file():
+                            try:
+                                model_material_refs.update(scan_dmx_material_references(Path(source_file)))
+                            except Exception as model_material_error:
+                                report.warnings.append(
+                                    f"Could not scan model material dependencies in {Path(source_file).name}: {model_material_error}"
+                                )
+                    if materials_root and model_material_refs:
+                        model_search_roots = [
+                            Path(item['path']) for item in material_scan.get('texture_roots', [])
+                            if item.get('exists') and item.get('path')
+                        ]
+                        model_material_result = convert_vmat_references(
+                            sorted(model_material_refs), materials_root,
+                            output_dir / 'materials' / 's2_import',
+                            vtfcmd or (toolchain or {}).get('vtfcmd', ''),
+                            search_roots=model_search_roots
+                        )
+                        model_material_report = output_dir / (p.stem + '_model_material_conversion.json')
+                        model_material_report.write_text(json.dumps(model_material_result, indent=2), encoding='utf-8')
+                        report.counts['model_vmat_referenced'] = len(model_material_refs)
+                        report.counts['model_vmat_converted'] = model_material_result.get('converted_count', 0)
+                        report.counts['model_vmat_missing'] = len(model_material_result.get('missing_vmat', []))
+                        report.counts['model_material_conversion_report'] = str(model_material_report)
+                        report.warnings.extend(model_material_result.get('warnings', []))
                     report.counts['unique_model_sources'] = len(model_result.get('models', []))
                     report.counts['compiled_model_variants'] = sum(
                         len(item.get('compiled', {})) for item in model_result.get('models', [])

@@ -204,7 +204,8 @@ When VTFCmd is configured, loose raster textures are compiled to VTF; editable `
 documents are also inspected to locate their loose image source. Compiled `.vtex_c`
 extraction remains unsupported. The resolver
 checks the selected addon materials folder and the shared content/game material roots
-reported by the VMAP scan. Generated VMT names are fed back into per-face VMF material assignment.
+reported by the VMAP scan. Referenced model DMX files are scanned for their own VMAT
+dependencies as well, so prop materials are included even when absent from world brushes. Generated VMT names are fed back into per-face VMF material assignment.
 
 This is a compatibility layer, not a complete Source 2 shader reimplementation.
 Unknown shader parameters are recorded in `*_material_conversion.json`; missing

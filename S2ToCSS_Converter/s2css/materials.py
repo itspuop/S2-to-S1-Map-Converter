@@ -127,6 +127,34 @@ def _parameter_records(value: Any):
     elif isinstance(value, list):
         for child in value: yield from _parameter_records(child)
 
+def collect_vmat_references(value: Any) -> list[str]:
+    """Recursively collect VMAT paths from DMX names and nested attributes."""
+    found = set()
+    pattern = re.compile(r"(?i)(?:[a-z0-9_ .()\-]+/)*[a-z0-9_ .()\-]+\.vmat(?:_c)?")
+    def visit(node):
+        if isinstance(node, dict):
+            for child in node.values(): visit(child)
+        elif isinstance(node, (list, tuple)):
+            for child in node: visit(child)
+        elif isinstance(node, str):
+            normalized = node.replace("\\", "/")
+            for match in pattern.findall(normalized):
+                found.add(match.strip().strip('"').replace("\\", "/"))
+    visit(value)
+    return sorted(found, key=str.lower)
+
+
+def scan_dmx_material_references(dmx_path: Path) -> list[str]:
+    """Read model DMX and find VMAT refs in DmeMaterial names or attributes."""
+    from .dmx_binary import parse_binary_v9
+    graph = parse_binary_v9(Path(dmx_path), include_binary=False)
+    refs = set()
+    for element in graph.get("elements", []):
+        refs.update(collect_vmat_references(element.get("name", "")))
+        refs.update(collect_vmat_references(element.get("attributes", {})))
+    return sorted(refs, key=str.lower)
+
+
 def _resolve_vmat(root: Path, ref: str) -> Path | None:
     rel = ref.replace("\\", "/").lstrip("/")
     if rel.lower().startswith("materials/"): rel = rel[10:]

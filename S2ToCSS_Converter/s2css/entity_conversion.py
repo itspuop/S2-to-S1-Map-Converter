@@ -1,5 +1,6 @@
 """Source 2 VMAP entity and I/O conversion helpers."""
 from __future__ import annotations
+import re
 from pathlib import Path
 from typing import Any
 

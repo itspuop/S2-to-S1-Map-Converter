@@ -84,6 +84,15 @@ _SCALAR_KEYS = {
 _BOOL_KEYS = {"g_balphatest": "$alphatest", "g_btranslucent": "$translucent",
               "g_bselfillum": "$selfillum", "g_bphong": "$phong"}
 
+_VECTOR_KEYS = {"g_vcolortint": "$color", "g_venvmaptint": "$envmaptint"}
+_FLAG_KEYS = {"f_phong": "$phong", "f_vertex_color": "$vertexcolor",
+              "f_vertex_alpha": "$vertexalpha", "f_additive": "$additive"}
+
+def _format_parameter(value: Any) -> str:
+    if isinstance(value, (list, tuple)):
+        return " ".join(str(item) for item in value)
+    return _truth(value)
+
 def _walk(value: Any, prefix: str = ""):
     if isinstance(value, dict):
         for key, child in value.items():
@@ -146,12 +155,35 @@ def _convert_texture(source_ref: str, source_root: Path, output_root: Path,
         return False
     target = output_root / (rel + ".vtf")
     target.parent.mkdir(parents=True, exist_ok=True)
+    if source.suffix.lower() == ".vtex":
+        try:
+            vtex_tree = parse_keyvalues(source.read_text(encoding="utf-8-sig", errors="replace"))
+            image_refs = [str(value) for _, key, value in _walk(vtex_tree)
+                          if key.lower() in {"m_filename", "filename"} and isinstance(value, str)]
+            image_source = None
+            for image_ref in image_refs:
+                image_rel = _texture_reference(image_ref)
+                for root in roots:
+                    image_candidates = [root / (image_rel + ext) for ext in (".tga", ".png", ".jpg", ".jpeg", ".psd", ".vtf")]
+                    image_source = next((p for p in image_candidates if p.is_file()), None)
+                    if image_source is not None: break
+                if image_source is not None: break
+            if image_source is None:
+                warnings.append(f"{source.name}: no loose image source was resolved from its VTEX document.")
+                return False
+            if len(image_refs) > 1:
+                warnings.append(f"{source.name}: multiple VTEX input frames/layers were found; only the first resolved image is converted.")
+            warnings.append(f"Resolved VTEX source {source.name} to {image_source.name}.")
+            source = image_source
+        except Exception as exc:
+            warnings.append(f"Could not parse VTEX source {source}: {exc}")
+            return False
+    elif source.suffix.lower() == ".vtex_c":
+        warnings.append(f"{source.name}: compiled VTEX extraction is not supported; provide the editable .vtex document or loose raster source.")
+        return False
     if source.suffix.lower() == ".vtf":
         if source.resolve() != target.resolve(): shutil.copy2(source, target)
         return True
-    if source.suffix.lower() in {".vtex", ".vtex_c"}:
-        warnings.append(f"{source.name}: VTEX extraction is not supported here; supply its loose raster source.")
-        return False
     if not vtfcmd or not Path(vtfcmd).is_file():
         shutil.copy2(source, target.with_suffix(source.suffix))
         warnings.append(f"VTFCmd not configured; copied loose texture {source.name} without VTF conversion.")
@@ -185,6 +217,9 @@ def convert_vmat_file(vmat_path: Path, materials_root: Path, output_root: Path,
     texture_values = []
     for path, key, value in flat:
         low = key.lower()
+        if low in _VECTOR_KEYS:
+            params[_VECTOR_KEYS[low]] = _format_parameter(value)
+            continue
         if isinstance(value, (dict, list)): continue
         if low in _TEXTURE_KEYS:
             tex = _texture_reference(value)
@@ -211,6 +246,10 @@ def convert_vmat_file(vmat_path: Path, materials_root: Path, output_root: Path,
             params[_SCALAR_KEYS[low]] = _truth(parameter_value)
         elif low in _BOOL_KEYS:
             params[_BOOL_KEYS[low]] = _truth(parameter_value)
+        elif low in _VECTOR_KEYS:
+            params[_VECTOR_KEYS[low]] = _format_parameter(parameter_value)
+        elif low in _FLAG_KEYS:
+            params[_FLAG_KEYS[low]] = _truth(parameter_value)
         elif low in {"f_alpha_test", "alpha_test"}:
             params["$alphatest"] = _truth(parameter_value)
         elif low in {"f_translucent", "translucent"}:

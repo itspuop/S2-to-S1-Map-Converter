@@ -22,6 +22,26 @@ class MaterialConversionTests(unittest.TestCase):
         self.assertEqual(tree["m_textureParams"][0]["m_name"], "g_tColor")
         self.assertEqual(tree["m_textureParams"][0]["m_pValue"], "resource:materials/test/color.vtex")
 
+    def test_resolves_loose_image_from_vtex_source(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "materials"
+            out = Path(tmp) / "out" / "materials" / "s2_import"
+            (root / "props").mkdir(parents=True)
+            (root / "props" / "stone.vmat").write_text(
+                '{ m_shaderName = "csgo_complex.vfx" m_textureParams = [ '
+                '{ m_name = "g_tColor" m_pValue = resource:"materials/props/stone_color.vtex" } ] }',
+                encoding="utf-8",
+            )
+            (root / "props" / "stone_color.vtex").write_text(
+                '{ m_inputTextureArray = [ { m_fileName = "materials/props/stone_color.tga" } ] }',
+                encoding="utf-8",
+            )
+            (root / "props" / "stone_color.tga").write_bytes(b"image")
+            result = convert_vmat_references(["materials/props/stone.vmat"], root, out)
+            self.assertEqual(result["converted_count"], 1)
+            self.assertTrue((out / "props" / "stone.vmt").is_file())
+            self.assertTrue((out / "props" / "stone_color.tga").is_file())
+
     def test_resolves_shared_content_vmat_and_texture_roots(self):
         with TemporaryDirectory() as tmp:
             addon_root = Path(tmp) / "addon_materials"
@@ -49,7 +69,11 @@ class MaterialConversionTests(unittest.TestCase):
             out = Path(tmp) / "out" / "materials" / "s2_import"
             (root / "test").mkdir(parents=True)
             (root / "test" / "color.vmat").write_text(
-                '''{ m_shaderName = "csgo_complex.vfx" m_textureParams = [ { m_name = "g_tColor" m_pValue = resource:"materials/test/color.png" } ] }''',
+                '''{ m_shaderName = "csgo_complex.vfx"
+                    m_textureParams = [ { m_name = "g_tColor" m_pValue = resource:"materials/test/color.png" } ]
+                    m_intParams = [ { m_name = "F_ALPHA_TEST" m_nValue = 1 } ]
+                    m_vectorParams = [ { m_name = "g_vColorTint" m_vValue = [1, 1, 1] } ]
+                }''',
                 encoding="utf-8",
             )
             (root / "test" / "color.png").write_bytes(b"image")
@@ -57,7 +81,10 @@ class MaterialConversionTests(unittest.TestCase):
             self.assertEqual(result["converted_count"], 1)
             vmt = out / "test" / "color.vmt"
             self.assertTrue(vmt.is_file())
-            self.assertIn('"$basetexture" "s2_import/test/color"', vmt.read_text(encoding="utf-8"))
+            vmt_text = vmt.read_text(encoding="utf-8")
+            self.assertIn('"$basetexture" "s2_import/test/color"', vmt_text)
+            self.assertIn('"$alphatest" "1"', vmt_text)
+            self.assertIn('"$color" "1 1 1"', vmt_text)
             self.assertTrue((out / "test" / "color.png").is_file())
             self.assertTrue(result["warnings"])
 

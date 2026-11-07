@@ -13,7 +13,7 @@ _SKIP = {"classname", "m_editoronly", "editoronly", "m_editorclass", "m_classnam
          "m_connections", "connections", "outputs", "outputconnections",
          "m_entityname", "m_entityid", "m_entityproperties"}
 _ALLOWED_PREFIXES = ("logic_", "trigger_", "func_", "info_", "point_", "env_",
-                     "filter_", "path_", "move_", "game_", "npc_", "weapon_", "light_")
+                     "filter_", "path_", "move_", "game_", "npc_", "weapon_", "light_", "prop_")
 _ALLOWED_EXACT = {"light", "worldspawn", "ambient_generic", "prop_detail",
                   "prop_static", "prop_dynamic", "prop_dynamic_override",
                   "prop_physics", "prop_physics_override", "prop_physics_multiplayer"}
@@ -100,7 +100,7 @@ def build_entity_conversion(records: list[dict]) -> dict:
                             "reason": "Class is not in the conservative Source 1 passthrough allowlist."})
             continue
         if classname.startswith("prop_") and _find_model_value(props): continue
-        keys = {"id": str(20000 + int(record.get("index") or 0)), "classname": classname}
+        keys = {"id": str(2000000 + int(record.get("index") or 0)), "classname": classname}
         if record.get("origin") is not None: keys["origin"] = _scalar(record["origin"]) or ""
         if record.get("angles") is not None: keys["angles"] = _scalar(record["angles"]) or ""
         for key, value in props.items():

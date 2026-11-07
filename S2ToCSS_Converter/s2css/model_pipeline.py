@@ -47,11 +47,21 @@ def find_model_source(project_root: str | Path, source_model: str) -> tuple[Path
         for path in root.rglob("*"):
             if path.is_file() and path.suffix.lower() in SUPPORTED_SOURCE_EXTENSIONS:
                 rel = path.relative_to(root).with_suffix("").as_posix().lower()
-                if rel == wanted_relative or path.stem.lower() == wanted_stem:
+                stem = path.stem.lower()
+                if rel == wanted_relative or stem == wanted_stem or rel.startswith(wanted_relative + "_") or stem.startswith(wanted_stem + "_"):
                     matches.append(path)
     except OSError:
         pass
-    matches.sort(key=lambda p: (0 if p.suffix.lower() == ".dmx" else 1, len(p.parts), str(p).lower()))
+    def source_rank(path: Path):
+        stem = path.stem.lower()
+        return (
+            0 if path.suffix.lower() == ".dmx" else 1,
+            0 if "lod0" in stem else 1,
+            0 if "body" in stem else 1,
+            len(stem),
+            str(path).lower(),
+        )
+    matches.sort(key=source_rank)
     return (matches[0] if matches else None), matches
 
 
@@ -69,7 +79,7 @@ def write_qc(
         f'$modelname "models/s2_import/{model_name}.mdl"',
         f'$body "body" "{smd_name}"',
         '$surfaceprop "default"',
-        '$cdmaterials "models/s2_import"',
+        '$cdmaterials "s2_import"',
     ]
     if static_prop:
         lines.append("$staticprop")

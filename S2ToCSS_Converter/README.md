@@ -1,4 +1,4 @@
-# S2ToCSS Converter v0.7 development branch
+# S2ToCSS Converter v0.9 development branch
 
 Windows Python GUI and batch-processing foundation for converting editable Source 2 Hammer projects into Counter-Strike: Source VMF/assets.
 
@@ -16,9 +16,9 @@ installed Blender Source Tools and Counter-Strike: Source compiler:
 - Writes a QC for each required static/dynamic model variant and optionally runs
   the configured CS:S `studiomdl.exe`.
 - Copies compiled model artifacts into the conversion output and writes
-  `model_pipeline_manifest.json`.
-- Emits a separate `<map>_model_entities.vmf` containing prop entities only for
-  models that were successfully compiled.
+  a per-map `*_model_pipeline_manifest.json`.
+- Appends prop entities for successfully compiled models to the map VMF; if brush
+  export fails, it writes a separate entity-only VMF.
 
 ### Configure the model toolchain
 
@@ -32,8 +32,10 @@ In the GUI, browse to:
 The model pipeline is optional. If paths are omitted, the converter still writes
 its model inventory and source-resolution manifest without launching external tools.
 For best source matching, keep editable DMX/FBX files in the same relative asset
-folder structure as the VMAP's `.vmdl` references. When both formats match, DMX
-is preferred; ambiguous matches are listed in the manifest and conversion report.
+folder structure as the VMAP's `.vmdl` references. Prefix matches such as
+`model_body_lod0.dmx` are supported when the model document is named `model.vmdl`.
+When both formats match, DMX is preferred and LOD0 is prioritized; ambiguous
+matches are listed in the manifest and conversion report.
 
 The compiler writes model artifacts into the configured CS:S game directory before
 the converter stages matching outputs under `models/s2_import` in the output
@@ -57,7 +59,67 @@ Run the new pure-Python pipeline tests with:
 py -m unittest test_model_pipeline.py
 ```
 
-## v0.7 development: native mesh schema inspection
+## v0.9 development: integrated VMAP brushes and model props
+
+The converter now has an integrated editable-VMAP geometry and model workflow:
+
+- Parses the editable binary-DMX VMAP and decodes the `CMapMesh → CDmePolygonMesh`
+  vertex-position and edge/face-loop topology.
+- Applies the current Source-style origin / pitch-yaw-roll / scale transform to
+  decoded mesh vertices.
+- Validates each candidate brush for closed manifold edges, planar faces,
+  convex half-spaces, duplicate geometric faces, and practical size limits.
+- Writes accepted convex meshes into one `<map>_brushes.vmf` incrementally and
+  records every exported or skipped mesh in `<map>_brushes_report.json`.
+- Resolves referenced model assets to editable DMX/FBX files, imports them with
+  Blender Source Tools, exports SMD/QC, optionally compiles static/dynamic
+  variants with CS:S `studiomdl.exe`, and appends compiled prop entities to the
+  same VMF.
+- Writes model inventory CSV/JSON and a per-map model-pipeline manifest.
+
+### GUI setup
+
+Select the editable `.vmap` file or the project folder. Configure the following
+optional paths when using the model/material workflows:
+
+- **Blender.exe** — Blender 5.0.1 was used for development.
+- **CS:S studiomdl.exe** — use the compiler from the Counter-Strike: Source toolchain.
+- **CS:S game folder** — select the folder containing CS:S `gameinfo.txt`.
+- **Source 2 materials folder** — optional; restricts material-reference analysis to
+  the selected addon's materials.
+- **Material map JSON** — optional mapping from Source 2 VMAT paths to existing
+  Source 1 VMT material names.
+- **VTFCmd.exe** — optional conversion of loose raster images to VTF.
+
+When both DMX and FBX sources match a referenced `.vmdl`, DMX is preferred.
+Ambiguous matches are listed in the model manifest. Compiled model artifacts are
+staged under `models/s2_import` in the output folder after compilation.
+
+### Geometry and conversion limits
+
+The brush exporter intentionally emits only meshes that pass its safety checks.
+Large, ambiguous, open, non-planar, non-manifold, non-convex, or otherwise
+unsupported meshes are skipped with a reason in the mesh report so they can be
+handled as models in Hammer. It does not fabricate geometry for failed decodes.
+
+Known tool materials can be mapped per face. Other Source 2 materials currently
+fall back to `TOOLS/TOOLSNODRAW`; complete VMAT shader/texture conversion is not
+implemented. Source 2 entity I/O, logic entities, displacements, overlays, and
+all special map features are not fully translated. Model prop positions and
+angles currently pass through unchanged; compare representative instances in
+Hammer before treating the coordinate/rotation mapping as certified. Non-unit
+model scales are skipped rather than approximated with unsupported CS:S entity
+scale keys. The output is therefore a substantial base converter, not a
+guaranteed one-click playable-map conversion for every VMAP.
+
+Run the expanded tests with:
+
+```bat
+py -m unittest test_model_inventory test_model_pipeline test_mesh_decode test_mesh_validate test_vmf_export test_mesh_schema
+py test_smoke.py
+```
+
+## v0.7 history: native mesh schema inspection
 
 This development branch adds a diagnostic pass for the real editable VMAP DMX graph:
 
@@ -137,15 +199,15 @@ py -m unittest test_model_inventory.py
 
 ## Current limitations
 
-This branch does **not** yet create a playable CS:S map directly from VMAP. Native mesh schema inspection is the first verification step toward vertex-stream decoding, polygon reconstruction, transform composition, closed-solid/convexity checks, and VMF generation. Complex meshes will continue to be flagged for the manual model workflow discussed for this project. Source 2 materials, model compilation, entity/I/O conversion, and full texture translation also remain future work.
+This branch now creates a partial VMF from safe convex CMapMesh geometry and successfully compiled model props. It is not a guaranteed complete playable-map converter: unsupported meshes are skipped, model transforms still need Hammer validation, and Source 2 entity/I/O conversion, displacements, overlays, and full VMAT shader/texture translation remain unfinished.
 
 ## Tests
 
 Run:
 
 ```bat
-py -m unittest test_mesh_schema.py
+py -m unittest test_model_inventory test_model_pipeline test_mesh_decode test_mesh_validate test_vmf_export test_mesh_schema
 py test_smoke.py
 ```
 
-The schema tests cover report-shape helpers. A real editable VMAP fixture is still needed to validate the exact mesh attribute and vertex-stream encoding before enabling automatic geometry export.
+The automated tests use synthetic mesh fixtures. Real-map coverage is based on the previously inspected `surf_the_wave.vmap` for DMX/model inventory; the newly integrated geometry exporter and headless Blender pipeline still need a fresh end-to-end run on your Windows setup.

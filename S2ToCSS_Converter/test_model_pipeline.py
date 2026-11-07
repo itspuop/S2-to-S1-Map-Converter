@@ -23,6 +23,18 @@ class ModelPipelineTests(unittest.TestCase):
             self.assertEqual(chosen, dmx)
             self.assertEqual(len(candidates), 2)
 
+    def test_finds_lod0_dmx_with_model_name_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "models/props").mkdir(parents=True)
+            lod0 = root / "models/props/coral_3_1_scale2_bg_body_lod0.dmx"
+            lod1 = root / "models/props/coral_3_1_scale2_bg_body_lod1.dmx"
+            lod0.write_bytes(b"lod0")
+            lod1.write_bytes(b"lod1")
+            chosen, matches = find_model_source(root, "models/props/coral_3_1_scale2_bg.vmdl")
+            self.assertEqual(chosen, lod0)
+            self.assertEqual(len(matches), 2)
+
     def test_finds_by_stem_when_source_tree_layout_differs(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

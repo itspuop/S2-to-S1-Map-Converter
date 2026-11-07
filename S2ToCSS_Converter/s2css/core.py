@@ -11,6 +11,8 @@ from dataclasses import dataclass, asdict
 from .dmx_binary import parse_binary_v9, summarize_graph, extract_transform_records, DMXError
 from .model_inventory import build_model_instance_inventory, write_model_instance_inventory
 from .model_pipeline import process_model_instances, build_prop_entities
+from .vmap_export import export_vmap_to_vmf
+from .vmap_export import export_vmap_to_vmf
 
 @dataclass
 class Report:
@@ -24,6 +26,14 @@ class Report:
         self.warnings = self.warnings or []
         self.errors = self.errors or []
         self.counts = self.counts or {}
+
+def project_root_for_map(map_path: Path) -> Path:
+    """Resolve an addon root when the selected VMAP lives in its conventional maps/ folder."""
+    parent = map_path.parent
+    if parent.name.lower() == 'maps' and parent.parent.is_dir():
+        return parent.parent
+    return parent
+
 
 def discover_inputs(path: Path):
     if path.is_file(): return [path]
@@ -223,6 +233,16 @@ def write_world_vmf(out: Path, mapname: str, brushes: list, prop_entities: list)
         parts.append('}\n')
     out.write_text(''.join(parts),encoding='utf-8')
 
+def append_vmf_entities(out: Path, prop_entities: list):
+    """Append top-level VMF entities after the worldspawn block."""
+    with out.open('a', encoding='utf-8', newline='\n') as handle:
+        for entity in prop_entities:
+            handle.write('entity\n{\n')
+            for key, value in entity.items():
+                handle.write(f' "{quote(key)}" "{quote(value)}"\n')
+            handle.write('}\n')
+
+
 def mesh_to_vmf(mesh_path: Path, output_dir: Path, report: Report, mode='static_props', max_faces=5000):
     try:
         import trimesh
@@ -313,13 +333,49 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                 invpath=output_dir/(p.stem+'_inventory.json')
                 invpath.write_text(json.dumps(inv,indent=2),encoding='utf-8')
                 report.counts.setdefault('vmap_inventory_files', []).append(str(invpath))
+                geometry_vmf = None
+                geometry_success = False
+                if inv.get('dmx_parsed'):
+                    try:
+                        geometry_vmf = output_dir / (p.stem + '_brushes.vmf')
+                        geometry_report = output_dir / (p.stem + '_brushes_report.json')
+                        materials_root = (Path(toolchain.get('materials_root')).expanduser()
+                                          if toolchain and toolchain.get('materials_root') else None)
+                        material_map_path = (Path(toolchain.get('material_map')).expanduser()
+                                             if toolchain and toolchain.get('material_map') else None)
+                        progress('Decoding CMapMesh topology and exporting validated convex VMF brushes…')
+                        geometry_result = export_vmap_to_vmf(
+                            p, geometry_vmf, geometry_report, materials_root, material_map_path
+                        )
+                        geometry_success = True
+                        report.counts.setdefault('vmf_outputs', []).append(str(geometry_vmf))
+                        report.counts['cmapmesh_nodes'] = geometry_result.get('cmapmesh_count', 0)
+                        report.counts['brushes_exported'] = geometry_result.get('exported_brush_count', 0)
+                        report.counts['meshes_skipped'] = geometry_result.get('skipped_mesh_count', 0)
+                        report.counts.setdefault('mesh_reports', []).append(str(geometry_report))
+                        skipped_meshes = [
+                            item for item in geometry_result.get('meshes', [])
+                            if item.get('status') == 'manual_or_unsupported'
+                        ]
+                        if skipped_meshes:
+                            report.warnings.append(
+                                f'{len(skipped_meshes)} CMapMesh node(s) were skipped because they were '
+                                'too complex, ambiguous, open, non-planar, non-manifold, or non-convex. '
+                                f'First reason: {skipped_meshes[0].get("reason", "see mesh report")}'
+                            )
+                        progress(
+                            f'Brush export complete: {geometry_result.get("exported_brush_count", 0)} '
+                            f'exported, {geometry_result.get("skipped_mesh_count", 0)} skipped.'
+                        )
+                    except Exception as mesh_error:
+                        report.errors.append(f'{p.name}: native CMapMesh VMF export failed: {mesh_error}')
                 if inv.get('dmx_parsed'):
                     model_rows = build_model_instance_inventory(inv)
                     model_json, model_csv = write_model_instance_inventory(model_rows, output_dir, p.stem)
                     report.counts['model_instances_found'] = report.counts.get('model_instances_found', 0) + len(model_rows)
                     report.counts.setdefault('model_instance_inventories', []).extend([str(model_json), str(model_csv)])
                     progress(f'Model inventory complete: {len(model_rows)} model-backed entity instance(s) identified.')
-                    model_root = input_path if input_path.is_dir() else p.parent
+                    model_root = input_path if input_path.is_dir() else project_root_for_map(p)
                     progress('Resolving editable FBX/DMX sources and running the optional Blender/studiomdl model pipeline…')
                     model_result = process_model_instances(
                         model_root, model_rows, output_dir, toolchain=toolchain or {}, progress=progress,
@@ -335,14 +391,18 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                         model_rows, model_result.get('compiled_models', {}), report.warnings
                     )
                     if prop_entities:
-                        model_vmf = output_dir / (p.stem + '_model_entities.vmf')
-                        write_world_vmf(model_vmf, p.stem, [], prop_entities)
-                        report.counts.setdefault('vmf_outputs', []).append(str(model_vmf))
-                        report.counts['model_prop_entities'] = report.counts.get('model_prop_entities', 0) + len(prop_entities)
-                        report.warnings.append(
-                            f'{model_vmf.name} contains converted model entities only; native CMapMesh '
-                            'world-brush reconstruction is still a separate unfinished stage.'
-                        )
+                        if geometry_success and geometry_vmf is not None and geometry_vmf.is_file():
+                            append_vmf_entities(geometry_vmf, prop_entities)
+                            report.counts['model_prop_entities'] = report.counts.get('model_prop_entities', 0) + len(prop_entities)
+                            progress(f'Appended {len(prop_entities)} compiled model prop entity/ies to {geometry_vmf.name}.')
+                        else:
+                            model_vmf = output_dir / (p.stem + '_model_entities.vmf')
+                            write_world_vmf(model_vmf, p.stem, [], prop_entities)
+                            report.counts.setdefault('vmf_outputs', []).append(str(model_vmf))
+                            report.counts['model_prop_entities'] = report.counts.get('model_prop_entities', 0) + len(prop_entities)
+                            report.warnings.append(
+                                f'{model_vmf.name} contains converted model entities only because brush export failed.'
+                            )
                     else:
                         progress('No compiled model assets were available for VMF entity placement.')
                     csv_path=output_dir/(p.stem+'_transform_inventory.csv')
@@ -357,7 +417,6 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                                 'entity_properties_class':row.get('entity_properties_class')})
                     report.counts.setdefault('transform_csv_outputs',[]).append(str(csv_path))
                     progress(f'DMX parse complete: {inv.get("dmx_element_count",0)} elements; {inv.get("dmx_transform_record_count",0)} transform records.')
-                report.warnings.append(f'{p.name}: editable VMAP graph and transform inventory generated. VMF brush reconstruction from mesh topology is not complete yet.')
             elif kind=='compiled_vmap':
                 report.warnings.append(f'{p.name}: compiled VMAP detected. This converter does not require compiled maps; select the editable .vmap and its associated assets for native parsing.')
             elif kind=='model_source':
@@ -379,9 +438,13 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
         except Exception as ex:
             report.errors.append(f'{p}: {ex}')
     # Loose raster textures can be converted when the user selected a directory.
-    texture_root = input_path if input_path.is_dir() else input_path.parent
+    project_root = input_path if input_path.is_dir() else project_root_for_map(input_path)
+    configured_materials = (Path(toolchain.get('materials_root')).expanduser()
+                            if toolchain and toolchain.get('materials_root') else None)
+    default_materials = project_root / 'materials'
+    texture_root = configured_materials or (default_materials if default_materials.is_dir() else project_root)
     try:
-        progress('Checking loose textures and running configured VTF conversion if available…')
+        progress('Checking the selected addon materials folder and running configured VTF conversion if available…')
         texture_count = convert_texture_folder(texture_root, output_dir, vtfcmd, report)
         if texture_count:
             report.counts['raster_textures_processed'] = texture_count

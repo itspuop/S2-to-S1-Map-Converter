@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 SUPPORTED_SOURCE_EXTENSIONS = (".dmx", ".fbx")
-SUPPORTED_PROP_CLASSES = {"prop_static", "prop_dynamic", "prop_dynamic_override", "prop_physics", "prop_physics_multiplayer"}
+SUPPORTED_PROP_CLASSES = {"prop_static", "prop_dynamic", "prop_dynamic_override", "prop_physics", "prop_physics_override", "prop_physics_multiplayer"}
 
 
 def safe_name(value: str) -> str:
@@ -260,7 +260,7 @@ def process_model_instances(
         variants = set()
         if classes & {"prop_static"}:
             variants.add("static")
-        if classes & {"prop_dynamic", "prop_physics", "prop_physics_multiplayer"}:
+        if classes & {"prop_dynamic", "prop_physics", "prop_physics_override", "prop_physics_multiplayer"}:
             variants.add("dynamic")
         if not variants:
             variants.add("static")

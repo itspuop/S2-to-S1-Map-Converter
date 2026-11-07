@@ -456,6 +456,10 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                         model_root, model_rows, output_dir, toolchain=toolchain or {}, progress=progress,
                         manifest_name=p.stem + '_model_pipeline_manifest.json'
                     )
+                    report.counts['model_smd_material_paths_normalized'] = sum(
+                        len(item.get('blender', {}).get('material_path_changes', []))
+                        for item in model_result.get('models', [])
+                    )
                     # Model DMX files can reference their own VMATs independently of the map's world meshes.
                     model_material_refs = set()
                     for model_row in model_rows:

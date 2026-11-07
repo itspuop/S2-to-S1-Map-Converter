@@ -71,6 +71,19 @@ class ModelPipelineTests(unittest.TestCase):
         self.assertEqual(entities[0]["skin"], "1")
         self.assertEqual(entities[0]["model"], "models/s2_import/crate_static.mdl")
 
+    def test_normalizes_vmat_paths_in_smd_triangle_materials(self):
+        with TemporaryDirectory() as tmp:
+            smd = Path(tmp) / "model.smd"
+            smd.write_text(
+                "version 1\\ntriangles\\nmaterials/models/coral.vmat\\n"
+                "0 0 0 0 0 0 0 0 0\\n0 0 0 0 0 0 0 0 0\\n"
+                "0 0 0 0 0 0 0 0 0\\nend\\n",
+                encoding="utf-8",
+            )
+            changes = normalize_smd_material_paths(smd)
+            self.assertEqual(changes[0]["smd_material"], "models/coral")
+            self.assertIn("models/coral", smd.read_text(encoding="utf-8"))
+
     def test_preserves_model_prop_targetname_and_io(self):
         rows = [{
             "source_model": "models/props/crate.vmdl",

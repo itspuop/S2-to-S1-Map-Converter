@@ -7,6 +7,40 @@ import traceback
 from pathlib import Path
 
 
+def normalize_smd_material_paths(smd_path: Path) -> list[dict]:
+    """Normalize Source 2 VMAT paths in SMD triangle material rows for QC $cdmaterials."""
+    lines = smd_path.read_text(encoding="utf-8-sig", errors="replace").splitlines()
+    in_triangles = False
+    changes = []
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.lower() == "triangles":
+            in_triangles = True
+            continue
+        if not in_triangles or not stripped:
+            continue
+        first = stripped.split()[0]
+        if first.lstrip("+-").isdigit():
+            continue
+        original = stripped.strip('"')
+        normalized = original.replace("\\", "/")
+        if normalized.lower().startswith("materials/"):
+            normalized = normalized[10:]
+        if normalized.lower().startswith("s2_import/"):
+            normalized = normalized[10:]
+        for suffix in (".vmat_c", ".vmat", ".vmt"):
+            if normalized.lower().endswith(suffix):
+                normalized = normalized[:-len(suffix)]
+                break
+        if normalized != original:
+            lines[index] = normalized
+            changes.append({"line": index + 1, "source_material": original,
+                            "smd_material": normalized})
+    if changes:
+        smd_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return changes
+
+
 def main():
     try:
         separator = sys.argv.index("--")
@@ -84,8 +118,10 @@ def main():
                 raise RuntimeError("Blender Source Tools reported success but produced no SMD.")
             expected = candidates[0]
 
+        material_path_changes = normalize_smd_material_paths(expected)
         payload = {
             "status": "success",
+            "material_path_changes": material_path_changes,
             "source_file": str(source),
             "smd_file": str(expected),
             "mesh_objects_imported": len(meshes),

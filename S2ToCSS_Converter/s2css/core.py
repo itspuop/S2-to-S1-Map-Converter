@@ -10,6 +10,7 @@ from pathlib import Path
 from dataclasses import dataclass, asdict
 from .dmx_binary import parse_binary_v9, summarize_graph, extract_transform_records, DMXError
 from .model_inventory import build_model_instance_inventory, write_model_instance_inventory
+from .model_pipeline import process_model_instances, build_prop_entities
 
 @dataclass
 class Report:
@@ -34,6 +35,7 @@ def detect_kind(p: Path):
     if n.endswith('.vmap_c'): return 'compiled_vmap'
     if p.suffix.lower()=='.vmap': return 'editable_vmap'
     if p.suffix.lower() in ('.obj','.gltf','.glb','.ply','.stl'): return 'geometry_export'
+    if p.suffix.lower() in ('.fbx','.dmx'): return 'model_source'
     if n.endswith(('.vmat_c','.vtex_c','.vmdl_c')): return 'compiled_asset'
     return 'unknown'
 
@@ -281,7 +283,7 @@ def convert_texture_folder(source: Path, output_dir: Path, vtfcmd: str, report: 
         except Exception as ex: report.errors.append(f'Texture conversion failed for {p}: {ex}')
     return count
 
-def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callback=None, progress_callback=None):
+def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callback=None, progress_callback=None, toolchain=None):
     def progress(message):
         print('[S2ToCSS] '+message, flush=True)
         if progress_callback: progress_callback(message)
@@ -317,6 +319,32 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                     report.counts['model_instances_found'] = report.counts.get('model_instances_found', 0) + len(model_rows)
                     report.counts.setdefault('model_instance_inventories', []).extend([str(model_json), str(model_csv)])
                     progress(f'Model inventory complete: {len(model_rows)} model-backed entity instance(s) identified.')
+                    model_root = input_path if input_path.is_dir() else p.parent
+                    progress('Resolving editable FBX/DMX sources and running the optional Blender/studiomdl model pipeline…')
+                    model_result = process_model_instances(
+                        model_root, model_rows, output_dir, toolchain=toolchain or {}, progress=progress,
+                        manifest_name=p.stem + '_model_pipeline_manifest.json'
+                    )
+                    report.counts['unique_model_sources'] = len(model_result.get('models', []))
+                    report.counts['compiled_model_variants'] = sum(
+                        len(item.get('compiled', {})) for item in model_result.get('models', [])
+                    )
+                    report.warnings.extend(model_result.get('warnings', []))
+                    report.errors.extend(model_result.get('errors', []))
+                    prop_entities = build_prop_entities(
+                        model_rows, model_result.get('compiled_models', {}), report.warnings
+                    )
+                    if prop_entities:
+                        model_vmf = output_dir / (p.stem + '_model_entities.vmf')
+                        write_world_vmf(model_vmf, p.stem, [], prop_entities)
+                        report.counts.setdefault('vmf_outputs', []).append(str(model_vmf))
+                        report.counts['model_prop_entities'] = report.counts.get('model_prop_entities', 0) + len(prop_entities)
+                        report.warnings.append(
+                            f'{model_vmf.name} contains converted model entities only; native CMapMesh '
+                            'world-brush reconstruction is still a separate unfinished stage.'
+                        )
+                    else:
+                        progress('No compiled model assets were available for VMF entity placement.')
                     csv_path=output_dir/(p.stem+'_transform_inventory.csv')
                     fields=['index','class','name','origin_x','origin_y','origin_z','pitch','yaw','roll','scale_x','scale_y','scale_z','mesh_face_count','mesh_vertex_count','mesh_materials','entity_properties_class']
                     with csv_path.open('w',newline='',encoding='utf-8-sig') as f:
@@ -332,6 +360,17 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                 report.warnings.append(f'{p.name}: editable VMAP graph and transform inventory generated. VMF brush reconstruction from mesh topology is not complete yet.')
             elif kind=='compiled_vmap':
                 report.warnings.append(f'{p.name}: compiled VMAP detected. This converter does not require compiled maps; select the editable .vmap and its associated assets for native parsing.')
+            elif kind=='model_source':
+                model_ref = p.with_suffix('.vmdl').name
+                model_row = {'source_model':model_ref,'source_entity_class':'prop_static','origin':[0,0,0],
+                             'angles':[0,0,0],'scales':[1,1,1],'element_index':None}
+                model_result = process_model_instances(
+                    p.parent, [model_row], output_dir, toolchain=toolchain or {}, progress=progress,
+                    manifest_name=p.stem + '_model_pipeline_manifest.json'
+                )
+                report.warnings.extend(model_result.get('warnings', []))
+                report.errors.extend(model_result.get('errors', []))
+                report.counts.setdefault('model_pipeline_manifests', []).append(str(output_dir/(p.stem + '_model_pipeline_manifest.json')))
             elif kind=='geometry_export':
                 vmf=mesh_to_vmf(p,output_dir,report)
                 report.counts.setdefault('vmf_outputs',[]).append(str(vmf))

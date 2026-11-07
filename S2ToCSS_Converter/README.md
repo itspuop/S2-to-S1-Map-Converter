@@ -2,6 +2,61 @@
 
 Windows Python GUI and batch-processing foundation for converting editable Source 2 Hammer projects into Counter-Strike: Source VMF/assets.
 
+## v0.8 development: automated model handoff
+
+The optional model pipeline now connects the model-instance inventory to the user's
+installed Blender Source Tools and Counter-Strike: Source compiler:
+
+- Resolves each referenced `.vmdl` to an editable same-path/same-stem `.dmx` or
+  `.fbx` source asset in the selected project tree.
+- Runs Blender in background mode and imports DMX through Blender Source Tools or
+  FBX through Blender's importer.
+- Exports the imported static mesh through the Blender Source Tools
+  `export_scene.smd` operator.
+- Writes a QC for each required static/dynamic model variant and optionally runs
+  the configured CS:S `studiomdl.exe`.
+- Copies compiled model artifacts into the conversion output and writes
+  `model_pipeline_manifest.json`.
+- Emits a separate `<map>_model_entities.vmf` containing prop entities only for
+  models that were successfully compiled.
+
+### Configure the model toolchain
+
+In the GUI, browse to:
+
+1. `Blender.exe` (Blender 5.0.1 was used for development).
+2. The Counter-Strike: Source-compatible `studiomdl.exe`.
+3. The CS:S game folder containing `gameinfo.txt` (commonly the `cstrike`
+   directory, not the parent Steam common folder).
+
+The model pipeline is optional. If paths are omitted, the converter still writes
+its model inventory and source-resolution manifest without launching external tools.
+For best source matching, keep editable DMX/FBX files in the same relative asset
+folder structure as the VMAP's `.vmdl` references. When both formats match, DMX
+is preferred; ambiguous matches are listed in the manifest and conversion report.
+
+The compiler writes model artifacts into the configured CS:S game directory before
+the converter stages matching outputs under `models/s2_import` in the output
+folder. Ensure the game directory is writable and back up any files with colliding
+names before compiling.
+
+### Important current boundaries
+
+This is an integration milestone, **not yet a complete playable-map converter**.
+The model entity VMF is deliberately separate from the world geometry VMF because
+native `CMapMesh` vertex streams, polygon topology, and convex brush reconstruction
+are not yet complete. VMAP model positions and angles are currently passed through
+unchanged; compare them in Hammer before treating the coordinate/rotation mapping
+as certified. Non-uniform model scales are skipped rather than approximated.
+Material translation and complete Source 2 entity/I/O conversion also remain
+unfinished.
+
+Run the new pure-Python pipeline tests with:
+
+```bat
+py -m unittest test_model_pipeline.py
+```
+
 ## v0.7 development: native mesh schema inspection
 
 This development branch adds a diagnostic pass for the real editable VMAP DMX graph:
@@ -15,7 +70,7 @@ This is deliberately **schema inspection, not mesh decoding yet**. The generic D
 
 ## Generate a mesh schema report
 
-From the extracted S2ToCSS_Converter_v06 directory, run:
+From the extracted S2ToCSS_Converter directory, run:
 
 ```bat
 py inspect_mesh_schema.py "D:\\path\\to\\editable_map.vmap"

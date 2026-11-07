@@ -1,0 +1,123 @@
+"""Headless Blender Source Tools exporter used by model_pipeline.py."""
+from __future__ import annotations
+
+import json
+import sys
+import traceback
+from pathlib import Path
+
+
+def main():
+    try:
+        separator = sys.argv.index("--")
+        source_path, output_dir, object_name = sys.argv[separator + 1:separator + 4]
+        source = Path(source_path)
+        output = Path(output_dir)
+        output.mkdir(parents=True, exist_ok=True)
+
+        try:
+            import bpy
+        except Exception as exc:
+            raise RuntimeError(f"Blender Python API is unavailable: {exc}")
+
+        try:
+            bpy.ops.preferences.addon_enable(module="io_scene_fbx")
+        except Exception:
+            pass
+        try:
+            bpy.ops.preferences.addon_enable(module="io_scene_valvesource")
+        except Exception:
+            pass
+        if not hasattr(bpy.context.scene, "vs"):
+            raise RuntimeError(
+                "Blender Source Tools is not enabled in this Blender profile. "
+                "Enable the io_scene_valvesource add-on and retry."
+            )
+
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        # Factory reset clears the active scene but does not unregister the enabled add-on.
+        if not hasattr(bpy.context.scene, "vs"):
+            bpy.ops.preferences.addon_enable(module="io_scene_valvesource")
+        try:
+            bpy.ops.preferences.addon_enable(module="io_scene_fbx")
+        except Exception:
+            pass
+        if not hasattr(bpy.context.scene, "vs"):
+            raise RuntimeError("Blender Source Tools did not register Scene.vs.")
+
+        suffix = source.suffix.lower()
+        if suffix == ".fbx":
+            bpy.ops.import_scene.fbx(filepath=str(source))
+        elif suffix == ".dmx":
+            if not hasattr(bpy.ops.import_scene, "smd"):
+                raise RuntimeError("Blender Source Tools DMX importer operator is unavailable.")
+            bpy.ops.import_scene.smd(filepath=str(source))
+        else:
+            raise RuntimeError(f"Unsupported source model extension: {suffix}")
+
+        meshes = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
+        if not meshes:
+            raise RuntimeError("Import completed but produced no mesh objects.")
+
+        bpy.ops.object.select_all(action="DESELECT")
+        for obj in meshes:
+            obj.select_set(True)
+        active = meshes[0]
+        bpy.context.view_layer.objects.active = active
+        if len(meshes) > 1:
+            bpy.ops.object.join()
+        active = bpy.context.view_layer.objects.active
+        active.name = object_name
+        active.data.name = object_name
+
+        scene = bpy.context.scene
+        scene.vs.export_format = "SMD"
+        scene.vs.up_axis = "Z"
+        scene.vs.export_path = str(output)
+        scene.vs.qc_compile = False
+        scene.vs.export_list.clear()
+        for obj in list(scene.objects):
+            if obj.type == "MESH":
+                obj.vs.export = (obj == active)
+                obj.vs.subdir = ""
+        export_item = scene.vs.export_list.add()
+        export_item.obj = active
+        active.select_set(True)
+        bpy.context.view_layer.objects.active = active
+
+        result = bpy.ops.export_scene.smd(export_scene=True)
+        if "FINISHED" not in result:
+            raise RuntimeError(f"Blender Source Tools export returned {result!r}")
+
+        expected = output / f"{object_name}.smd"
+        if not expected.is_file():
+            candidates = sorted(output.rglob("*.smd"))
+            if not candidates:
+                raise RuntimeError("Blender Source Tools reported success but produced no SMD.")
+            expected = candidates[0]
+
+        payload = {
+            "status": "success",
+            "source_file": str(source),
+            "smd_file": str(expected),
+            "mesh_objects_imported": len(meshes),
+            "vertex_count": len(active.data.vertices),
+            "polygon_count": len(active.data.polygons),
+            "blender_version": bpy.app.version_string,
+            "source_tools_export_operator": "export_scene.smd",
+        }
+        (output / "blender_export_result.json").write_text(
+            json.dumps(payload, indent=2), encoding="utf-8"
+        )
+    except Exception as exc:
+        output_dir = Path(sys.argv[sys.argv.index("--") + 2]) if "--" in sys.argv else Path.cwd()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "blender_export_result.json").write_text(
+            json.dumps({"status": "failed", "error": str(exc), "traceback": traceback.format_exc()}, indent=2),
+            encoding="utf-8",
+        )
+        raise
+
+
+if __name__ == "__main__":
+    main()

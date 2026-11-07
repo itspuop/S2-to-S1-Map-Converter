@@ -34,6 +34,18 @@ class EntityConversionTests(unittest.TestCase):
             self.assertIn('"targetname" "relay_start"', text)
             self.assertIn('"OnTrigger" "door_1,Open,,0.25,-1"', text)
 
+    def test_parses_legacy_output_key_to_connection_string(self):
+        records = [{
+            "index": 15, "class": "CMapEntity",
+            "entity_properties": {
+                "classname": "logic_relay", "targetname": "relay_start",
+                "connections": {"OnTrigger": "door_1,Open,,0.5,-1"},
+            },
+        }]
+        result = build_entity_conversion(records)
+        self.assertEqual(result["connection_count"], 1)
+        self.assertEqual(result["entities"][0]["__connections__"][0]["delay"], "0.5")
+
     def test_skips_unknown_class_and_model_backed_prop(self):
         records = [
             {"index": 1, "class": "CMapEntity", "entity_properties": {"classname": "cs2_only_thing"}},

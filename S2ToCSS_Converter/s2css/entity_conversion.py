@@ -41,8 +41,44 @@ def _find_connections(value: Any):
             ):
                 found.append(merged)
                 return
-            for child in node.values():
-                if isinstance(child, (dict, list)): visit(child)
+            for key, child in node.items():
+                output_key = str(key)
+                if output_key.lower().startswith("on"):
+                    if isinstance(child, str):
+                        parts = child.split(",", 4)
+                        if len(parts) >= 2:
+                            found.append({
+                                "output": output_key, "target": parts[0].strip(),
+                                "input": parts[1].strip(),
+                                "parameter": parts[2].strip() if len(parts) > 2 else "",
+                                "delay": parts[3].strip() if len(parts) > 3 else "0",
+                                "times_to_fire": parts[4].strip() if len(parts) > 4 else "-1",
+                            })
+                    elif isinstance(child, dict):
+                        mapped = dict(child)
+                        mapped.setdefault("output", output_key)
+                        lowered_child = {str(k).lower() for k in mapped}
+                        if any(k in lowered_child for k in ("target", "targetname", "m_targetname", "m_target")) and any(
+                            k in lowered_child for k in ("input", "inputname", "m_inputname")
+                        ):
+                            found.append(mapped)
+                        else:
+                            visit(child)
+                    elif isinstance(child, list):
+                        for item in child:
+                            if isinstance(item, str):
+                                parts = item.split(",", 4)
+                                if len(parts) >= 2:
+                                    found.append({
+                                        "output": output_key, "target": parts[0].strip(),
+                                        "input": parts[1].strip(),
+                                        "parameter": parts[2].strip() if len(parts) > 2 else "",
+                                        "delay": parts[3].strip() if len(parts) > 3 else "0",
+                                        "times_to_fire": parts[4].strip() if len(parts) > 4 else "-1",
+                                    })
+                            elif isinstance(item, (dict, list)): visit(item)
+                elif isinstance(child, (dict, list)):
+                    visit(child)
         elif isinstance(node, list):
             for child in node: visit(child)
     visit(value)

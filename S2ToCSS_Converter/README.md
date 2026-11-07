@@ -207,7 +207,9 @@ checks the selected addon materials folder and the shared content/game material 
 reported by the VMAP scan. Referenced model DMX files are scanned for their own VMAT
 dependencies as well, so prop materials are included even when absent from world brushes.
 The Blender export stage normalizes VMAT paths in SMD triangle material rows to match
-the generated VMT paths under the QC `$cdmaterials "s2_import"` directory. Generated VMT names are fed back into per-face VMF material assignment.
+the generated VMT paths under the QC `$cdmaterials "s2_import"` directory. Generated
+VMT/VTF files are staged into the configured CS:S game directory under
+`materials/s2_import/` when that path is supplied. Generated VMT names are fed back into per-face VMF material assignment.
 
 This is a compatibility layer, not a complete Source 2 shader reimplementation.
 Unknown shader parameters are recorded in `*_material_conversion.json`; missing

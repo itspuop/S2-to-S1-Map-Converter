@@ -2,9 +2,22 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from s2css.materials import parse_keyvalues, convert_vmat_references, collect_vmat_references
+from s2css.materials import parse_keyvalues, convert_vmat_references, collect_vmat_references, stage_materials_to_game
 
 class MaterialConversionTests(unittest.TestCase):
+    def test_stages_generated_materials_into_css_game_directory(self):
+        with TemporaryDirectory() as tmp:
+            source = Path(tmp) / "output" / "materials" / "s2_import"
+            game = Path(tmp) / "cstrike"
+            source.mkdir(parents=True)
+            game.mkdir()
+            (source / "crate.vmt").write_text('"LightmappedGeneric" {}', encoding="utf-8")
+            (source / "crate.vtf").write_bytes(b"vtf")
+            copied = stage_materials_to_game(source, game)
+            self.assertEqual(copied, 2)
+            self.assertTrue((game / "materials" / "s2_import" / "crate.vmt").is_file())
+            self.assertTrue((game / "materials" / "s2_import" / "crate.vtf").is_file())
+
     def test_collects_nested_dmx_material_paths(self):
         refs = collect_vmat_references({
             "name": r"materials\models\corals\coral.vmat",

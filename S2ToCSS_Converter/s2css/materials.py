@@ -327,6 +327,29 @@ def convert_vmat_file(vmat_path: Path, materials_root: Path, output_root: Path,
             "shader_source": shader, "shader_target": vmt_shader,
             "parameters": params, "unknown_parameters": unknown, "warnings": warnings}
 
+def stage_materials_to_game(source_materials_root: Path, game_dir: Path) -> int:
+    """Copy generated s2_import materials into the configured CS:S game directory."""
+    source_root = Path(source_materials_root)
+    game_root = Path(game_dir)
+    if not source_root.is_dir() or not game_root.is_dir():
+        return 0
+    target_root = game_root / "materials" / "s2_import"
+    try:
+        if source_root.resolve() == target_root.resolve():
+            return 0
+    except OSError:
+        pass
+    copied = 0
+    for source in source_root.rglob("*"):
+        if not source.is_file():
+            continue
+        destination = target_root / source.relative_to(source_root)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        copied += 1
+    return copied
+
+
 def convert_vmat_references(material_refs: list[str], materials_root: Path,
                             output_materials_root: Path, vtfcmd: str = "", search_roots=None) -> dict:
     results, missing, warnings = [], [], []

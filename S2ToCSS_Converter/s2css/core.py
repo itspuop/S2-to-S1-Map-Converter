@@ -12,7 +12,7 @@ from .dmx_binary import parse_binary_v9, summarize_graph, extract_transform_reco
 from .model_inventory import build_model_instance_inventory, write_model_instance_inventory
 from .model_pipeline import process_model_instances, build_prop_entities
 from .vmap_export import export_vmap_to_vmf
-from .materials import convert_vmat_references, scan_dmx_material_references, collect_vmat_references
+from .materials import convert_vmat_references, scan_dmx_material_references, collect_vmat_references, stage_materials_to_game
 from .entity_conversion import build_entity_conversion, append_entity_blocks
 
 @dataclass
@@ -427,6 +427,16 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                                     p, geometry_vmf, geometry_report, materials_root, generated_map
                                 )
                                 generated_map.unlink(missing_ok=True)
+                            if toolchain and toolchain.get('game_dir'):
+                                game_target = Path(toolchain['game_dir']).expanduser()
+                                if game_target.is_dir():
+                                    staged = stage_materials_to_game(output_dir / 'materials' / 's2_import', game_target)
+                                    report.counts['materials_staged_to_game'] = max(
+                                        report.counts.get('materials_staged_to_game', 0), staged
+                                    )
+                                    report.counts['materials_stage_target'] = str(game_target / 'materials' / 's2_import')
+                                else:
+                                    report.warnings.append(f"Configured CS:S game directory does not exist: {game_target}")
                         report.counts.setdefault('mesh_reports', []).append(str(geometry_report))
                         skipped_meshes = [
                             item for item in geometry_result.get('meshes', [])
@@ -494,6 +504,14 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                         report.counts['model_material_conversion_report'] = str(model_material_report)
                         report.warnings.extend(model_material_result.get('warnings', []))
                         report.warnings.extend(model_material_result.get('limitations', []))
+                        if toolchain and toolchain.get('game_dir'):
+                            game_target = Path(toolchain['game_dir']).expanduser()
+                            if game_target.is_dir():
+                                staged = stage_materials_to_game(output_dir / 'materials' / 's2_import', game_target)
+                                report.counts['materials_staged_to_game'] = max(
+                                    report.counts.get('materials_staged_to_game', 0), staged
+                                )
+                                report.counts['materials_stage_target'] = str(game_target / 'materials' / 's2_import')
                     report.counts['unique_model_sources'] = len(model_result.get('models', []))
                     report.counts['compiled_model_variants'] = sum(
                         len(item.get('compiled', {})) for item in model_result.get('models', [])

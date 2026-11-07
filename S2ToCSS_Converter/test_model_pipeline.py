@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from tempfile import TemporaryDirectory
 from pathlib import Path
 
 from s2css.model_pipeline import (

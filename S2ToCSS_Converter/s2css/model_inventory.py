@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from typing import Any, Iterable
 
-_MODEL_SUFFIX = re.compile(r"(?i)\\.vmdl(?:_c)?$")
+_MODEL_SUFFIX = re.compile(r"(?i)\.vmdl(?:_c)?$")
 
 
 def _find_model_paths(value: Any) -> list[str]:
@@ -28,7 +28,7 @@ def _find_model_paths(value: Any) -> list[str]:
         normalized = value.strip().replace("\\", "/")
         # DMX properties sometimes contain a path embedded in a longer string.
         for match in re.findall(
-            r"(?i)(?:[a-z0-9_ .()\\-]+/)*[a-z0-9_ .()\\-]+\\.vmdl(?:_c)?",
+            r"(?i)(?:[a-z0-9_ .()\-]+/)*[a-z0-9_ .()\-]+\.vmdl(?:_c)?",
             normalized,
         ):
             path = match.strip().strip('"').replace("\\", "/")

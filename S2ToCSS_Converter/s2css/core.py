@@ -479,6 +479,11 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                     report.counts['entity_io_connections'] = entity_result.get('connection_count', 0)
                     report.counts['entities_skipped'] = len(entity_result.get('skipped_entities', []))
                     report.counts['entity_properties_unmapped'] = len(entity_result.get('unsupported_properties', []))
+                    report.counts['entity_io_targets_unresolved'] = len(entity_result.get('unresolved_connections', []))
+                    if entity_result.get('unresolved_connections'):
+                        report.warnings.append(
+                            f"{len(entity_result['unresolved_connections'])} output connection target(s) could not be matched to an inventoried targetname; see {entity_json.name}."
+                        )
                     if entity_result.get('unsupported_properties'):
                         report.warnings.append(
                             f"{len(entity_result['unsupported_properties'])} Source 2-prefixed entity property value(s) were not mapped; see {entity_json.name}."

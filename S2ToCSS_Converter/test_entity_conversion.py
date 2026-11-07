@@ -21,6 +21,7 @@ class EntityConversionTests(unittest.TestCase):
         result = build_entity_conversion(records)
         self.assertEqual(result["entity_count"], 1)
         self.assertEqual(result["connection_count"], 1)
+        self.assertEqual(len(result["unresolved_connections"]), 1)
         entity = result["entities"][0]
         self.assertEqual(entity["classname"], "logic_relay")
         self.assertEqual(entity["origin"], "1 2 3")

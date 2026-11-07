@@ -71,6 +71,15 @@ def _find_model_value(props: dict) -> bool:
 
 def build_entity_conversion(records: list[dict]) -> dict:
     entities, skipped, unsupported_properties = [], [], []
+    known_targets = set()
+    for record in records:
+        if record.get("class") != "CMapEntity": continue
+        props = record.get("entity_properties")
+        if not isinstance(props, dict): continue
+        for key in ("targetname", "m_targetname", "name", "m_name"):
+            value = props.get(key)
+            if isinstance(value, str) and value.strip():
+                known_targets.add(value.strip())
     for record in records:
         if record.get("class") != "CMapEntity": continue
         props = record.get("entity_properties")
@@ -108,7 +117,20 @@ def build_entity_conversion(records: list[dict]) -> dict:
             if parsed: connections.append(parsed)
         if connections: keys["__connections__"] = connections
         entities.append(keys)
+    unresolved_connections = []
+    special_targets = {"!activator", "!caller", "!self", "!player", "!pvsplayer"}
+    for entity in entities:
+        for connection in entity.get("__connections__", []):
+            target = connection["target"].strip()
+            if target.lower() not in special_targets and target not in known_targets:
+                unresolved_connections.append({
+                    "source_targetname": entity.get("targetname", ""),
+                    "output": connection["output"], "target": target,
+                    "input": connection["input"],
+                })
     return {"entities": entities, "skipped_entities": skipped, "unsupported_properties": unsupported_properties,
+            "unresolved_connections": unresolved_connections,
+            "known_targetname_count": len(known_targets),
             "entity_count": len(entities),
             "connection_count": sum(len(e.get("__connections__", [])) for e in entities)}
 

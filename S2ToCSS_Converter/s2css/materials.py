@@ -8,7 +8,67 @@ import re, shutil, subprocess
 from pathlib import Path
 from typing import Any
 
-_TOKEN = re.compile(r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|[{}]|[^\s{}]+')
+_TOKEN = re.compile(r'<!--[\s\S]*?-->|//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|[{}\[\]=,]|[^\s{}\[\]=,]+')
+
+def _unquote(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] == '"':
+        return value[1:-1]
+    return value
+
+def parse_keyvalues(text: str) -> dict[str, Any]:
+    """Parse legacy KeyValues and the assignment/array subset of text KV3 VMATs."""
+    tokens = [_unquote(t) for t in _TOKEN.findall(text)
+              if not t.startswith("//") and not t.startswith("/*") and not t.startswith("<!--")]
+    pos = 0
+    def value():
+        nonlocal pos
+        if pos >= len(tokens): return ""
+        token = tokens[pos]
+        if token == "{":
+            pos += 1
+            return mapping("}")
+        if token == "[":
+            pos += 1
+            values = []
+            while pos < len(tokens) and tokens[pos] != "]":
+                if tokens[pos] == ",": pos += 1; continue
+                values.append(value())
+            if pos < len(tokens) and tokens[pos] == "]": pos += 1
+            return values
+        pos += 1
+        if token.endswith(":") and pos < len(tokens):
+            token += tokens[pos]
+            pos += 1
+        return token
+    def mapping(close: str | None = None):
+        nonlocal pos
+        result: dict[str, Any] = {}
+        while pos < len(tokens):
+            if close and tokens[pos] == close:
+                pos += 1
+                return result
+            if tokens[pos] == ",":
+                pos += 1
+                continue
+            key = tokens[pos]
+            if key in {"}", "]", "{", "["}:
+                raise ValueError(f"Unexpected token {key!r} while parsing VMAT")
+            pos += 1
+            if pos < len(tokens) and tokens[pos] == "=":
+                pos += 1
+            child = value()
+            if key in result:
+                if not isinstance(result[key], list): result[key] = [result[key]]
+                result[key].append(child)
+            else:
+                result[key] = child
+        if close:
+            raise ValueError(f"Unclosed {close!r} block in VMAT")
+        return result
+    if tokens and tokens[0] == "{":
+        return value()
+    return mapping()
+
 _TEXTURE_KEYS = {
     "g_tcolor": "$basetexture",
     "g_tnormal": "$bumpmap", "g_tnormalmap": "$bumpmap",

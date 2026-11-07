@@ -108,7 +108,7 @@ guaranteed one-click playable-map conversion for every VMAP.
 Run the expanded tests with:
 
 ```bat
-py -m unittest test_model_inventory test_model_pipeline test_mesh_decode test_mesh_validate test_vmf_export test_mesh_schema test_material_conversion test_entity_conversion
+py -m unittest test_model_inventory test_model_pipeline test_mesh_decode test_mesh_validate test_vmf_export test_mesh_schema test_material_conversion test_entity_conversion test_material_conversion test_entity_conversion
 py test_smoke.py
 ```
 
@@ -219,8 +219,9 @@ blocks, preserving parameter, delay, and fire count.
 Entity and I/O conversion remains schema-dependent: unsupported Source 2 entity
 classes and connection encodings are not guessed. Coordinate/angle conventions,
 entity-specific Source 2 behavior, keyvalue differences, and output target
-resolution still require real-map Hammer testing. The report is the authoritative
-record of what was emitted or skipped.
+resolution still require real-map Hammer testing. The report also lists output targets
+that do not match any inventoried targetname. The report is the authoritative record
+of what was emitted, skipped, or left unresolved.
 
 ## Tests
 

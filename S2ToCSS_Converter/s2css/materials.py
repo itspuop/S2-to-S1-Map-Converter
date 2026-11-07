@@ -8,7 +8,7 @@ import re, shutil, subprocess
 from pathlib import Path
 from typing import Any
 
-_TOKEN = re.compile(r'<!--[\s\S]*?-->|//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|[{}\[\]=,]|[^\s{}\[\]=,]+')
+_TOKEN = re.compile(r'<!--[\s\S]*?-->|//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|[{}\[\]=,]|[^\s{}\[\]=,"]+')
 
 def _unquote(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] == '"':
@@ -99,7 +99,7 @@ def _truth(value: Any) -> str:
 
 def _texture_reference(value: Any) -> str:
     path = str(value).strip().replace("\\", "/").strip('"')
-    path = re.sub(r"(?i)^(resource:|file:)", "", path)
+    path = re.sub(r"(?i)^(resource:|file:)", "", path).strip('"')
     path = re.sub(r"(?i)^materials/", "", path)
     path = re.sub(r"(?i)\.(vtex|vtex_c|tga|png|jpg|jpeg|psd|vtf)$", "", path)
     return path.strip("/")

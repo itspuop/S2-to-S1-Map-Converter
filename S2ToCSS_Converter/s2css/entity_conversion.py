@@ -13,7 +13,7 @@ _SKIP = {"classname", "m_editoronly", "editoronly", "m_editorclass", "m_classnam
          "m_connections", "connections", "outputs", "outputconnections",
          "m_entityname", "m_entityid", "m_entityproperties"}
 _ALLOWED_PREFIXES = ("logic_", "trigger_", "func_", "info_", "point_", "env_",
-                     "filter_", "path_", "move_", "game_", "npc_", "weapon_")
+                     "filter_", "path_", "move_", "game_", "npc_", "weapon_", "light_")
 _ALLOWED_EXACT = {"light", "worldspawn", "ambient_generic", "prop_detail",
                   "prop_static", "prop_dynamic", "prop_dynamic_override",
                   "prop_physics", "prop_physics_override", "prop_physics_multiplayer"}
@@ -76,8 +76,9 @@ def build_entity_conversion(records: list[dict]) -> dict:
         if record.get("class") != "CMapEntity": continue
         props = record.get("entity_properties")
         if not isinstance(props, dict): continue
+        lowered_props = {str(k).lower(): v for k, v in props.items()}
         for key in ("targetname", "m_targetname", "name", "m_name"):
-            value = props.get(key)
+            value = lowered_props.get(key)
             if isinstance(value, str) and value.strip():
                 known_targets.add(value.strip())
     for record in records:
@@ -90,7 +91,8 @@ def build_entity_conversion(records: list[dict]) -> dict:
             for key, value in node_attrs.items():
                 if key not in props and key.lower() in {"connections", "outputs", "m_connections", "outputconnections"}:
                     props[key] = value
-        raw_class = props.get("classname", props.get("m_className", props.get("m_ClassName", "")))
+        lowered_props = {str(k).lower(): v for k, v in props.items()}
+        raw_class = lowered_props.get("classname", lowered_props.get("m_classname", ""))
         classname = str(raw_class).strip().lower()
         if not classname: continue
         if not (classname in _ALLOWED_EXACT or classname.startswith(_ALLOWED_PREFIXES)):

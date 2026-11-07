@@ -352,7 +352,10 @@ def build_prop_entities(rows: Iterable[dict], compiled_models: dict, warnings: l
                 warnings.append(f"Ignored non-numeric skin value {skin!r} on {ref} instance {row.get('element_index')}.")
         rendercolor = row.get("rendercolor")
         if rendercolor not in (None, ""):
-            channels = str(rendercolor).replace(",", " ").split()
+            if isinstance(rendercolor, (list, tuple)):
+                channels = [str(value) for value in rendercolor]
+            else:
+                channels = str(rendercolor).replace(",", " ").replace("[", " ").replace("]", " ").split()
             if len(channels) >= 3:
                 entity["rendercolor"] = " ".join(channels[:3])
         # Preserve common Source 1 prop keyvalues that are otherwise lost when

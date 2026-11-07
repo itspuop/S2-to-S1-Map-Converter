@@ -395,6 +395,19 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                                     normalized_key = key.replace('\\', '/')
                                     material_map[normalized_key] = generated_name
                                     material_map[normalized_key.lower()] = generated_name
+                            # Explicit user mappings take precedence over automatic guesses.
+                            if material_map_path and material_map_path.is_file():
+                                try:
+                                    manual_data = json.loads(material_map_path.read_text(encoding='utf-8-sig'))
+                                    manual_data = manual_data.get('material_map', manual_data) if isinstance(manual_data, dict) else {}
+                                    if isinstance(manual_data, dict):
+                                        for key, value in manual_data.items():
+                                            if isinstance(value, str):
+                                                normalized_key = str(key).replace(chr(92), '/')
+                                                material_map[normalized_key] = value
+                                                material_map[normalized_key.lower()] = value
+                                except (OSError, json.JSONDecodeError) as exc:
+                                    report.warnings.append(f"Could not merge custom material mappings: {exc}")
                             report.counts['vmat_converted'] = material_result.get('converted_count', 0)
                             report.counts['vmat_missing'] = len(material_result.get('missing_vmat', []))
                             report.counts['material_conversion_report'] = str(output_dir / (p.stem + '_material_conversion.json'))

@@ -364,7 +364,7 @@ def _scan_source2_materials(
                 matches.append({"root": label, "path": str(candidate)})
         return matches
 
-    texture_pattern = re.compile(r'"([^"]+\.(?:tga|png|jpg|jpeg|psd|vtf|vtex|mks))"', re.I)
+    texture_pattern = re.compile(r'"([^"]+\.(?:tga|png|jpg|jpeg|psd|vtf|vtex_c|vtex|mks))"', re.I)
     for ref in sorted(refs):
         normalized = ref[len("materials/"):] if ref.lower().startswith("materials/") else ref
         vmat_matches = asset_candidates(ref)
@@ -401,7 +401,7 @@ def _scan_source2_materials(
                 item["read_error"] = str(exc)
         report["materials"].append(item)
     report["note"] = (
-        "Availability scan only. VMAT/VTexture conversion to VMT/VTF is not implemented. "
+        "Availability scan for the VMAP exporter. The GUI conversion orchestrator performs best-effort VMAT-to-VMT conversion separately. "
         "Material-slot presence does not establish which material belongs to each face."
     )
     return report
@@ -586,7 +586,7 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
                         "cmapmesh_count": total, "processed_mesh_count": ordinal,
                         "exported_brush_count": exported, "skipped_mesh_count": skipped,
                         "complete": ordinal == total,
-                        "material_policy": "Per-face material slots are read from faceData materialindex streams. Known tool-material equivalents are mapped; other Source 2 materials safely fall back to TOOLS/TOOLSNODRAW because VMAT-to-VMT conversion is not implemented.",
+                        "material_policy": "Per-face material slots are read from faceData materialindex streams. Known tool-material equivalents are mapped; other Source 2 materials use generated VMT mappings when supplied by the conversion orchestrator, or TOOLS/TOOLSNODRAW as a fallback.",
                         "material_scan": material_scan,
                         "meshes": results,
                     }
@@ -601,7 +601,7 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
         "exported_brush_count": exported, "skipped_mesh_count": skipped,
         "complete": True,
         "elapsed_seconds": round(time.monotonic() - started, 2),
-        "material_policy": "Per-face material slots are read from faceData materialindex streams. Known tool-material equivalents are mapped; other Source 2 materials safely fall back to TOOLS/TOOLSNODRAW because VMAT-to-VMT conversion is not implemented.",
+        "material_policy": "Per-face material slots are read from faceData materialindex streams. Known tool-material equivalents are mapped; other Source 2 materials safely fall back to TOOLS/TOOLSNODRAW unless the conversion orchestrator supplies a generated VMT mapping.",
         "material_scan": material_scan,
         "meshes": results,
     }

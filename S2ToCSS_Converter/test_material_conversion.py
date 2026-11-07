@@ -10,13 +10,25 @@ class MaterialConversionTests(unittest.TestCase):
         self.assertEqual(tree["Layer0"]["shader"], "csgo_complex.vfx")
         self.assertEqual(tree["Layer0"]["TextureColor"]["g_tColor"], "materials/test/color.vtex")
 
+    def test_parses_modern_kv3_parameter_arrays(self):
+        tree = parse_keyvalues('''<!-- kv3 encoding:text:version{...} -->
+        {
+            m_shaderName = "csgo_complex.vfx"
+            m_textureParams = [
+                { m_name = "g_tColor" m_pValue = resource:"materials/test/color.vtex" }
+            ]
+        }''')
+        self.assertEqual(tree["m_shaderName"], "csgo_complex.vfx")
+        self.assertEqual(tree["m_textureParams"][0]["m_name"], "g_tColor")
+        self.assertEqual(tree["m_textureParams"][0]["m_pValue"], "resource:materials/test/color.vtex")
+
     def test_writes_vmt_and_copies_source_texture_when_vtfcmd_missing(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "materials"
             out = Path(tmp) / "out" / "materials" / "s2_import"
             (root / "test").mkdir(parents=True)
             (root / "test" / "color.vmat").write_text(
-                '"Layer0" { "shader" "csgo_complex.vfx" "TextureColor" { "g_tColor" "materials/test/color.png" } }',
+                '''{ m_shaderName = "csgo_complex.vfx" m_textureParams = [ { m_name = "g_tColor" m_pValue = resource:"materials/test/color.png" } ] }''',
                 encoding="utf-8",
             )
             (root / "test" / "color.png").write_bytes(b"image")

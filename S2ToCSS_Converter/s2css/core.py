@@ -115,7 +115,7 @@ def scan_vmap_text(path: Path):
             'dmx_transform_records': transforms,
             'dmx_model_references': summary['model_references'],
             'dmx_material_references': summary['material_references'],
-            'note':'Binary DMX v9 object graph and transforms are decoded. Mesh coordinates/faces are inventoried but not yet reconstructed into VMF brushes.'
+            'note':'This inventory stage reports binary DMX nodes and transforms; the separate VMAP export stage emits supported convex brushes.'
         })
         result['model_references'] = sorted(set(result['model_references']) | set(summary['model_references']))
         result['material_references'] = sorted(set(result['material_references']) | set(summary['material_references']))
@@ -183,9 +183,9 @@ def analyze_project(project_root: Path, output_dir: Path, progress_callback=None
             'material_refs_missing':sum(not r['exists'] for r in material_rows),
         },
         'limitations':[
-            'Binary DMX v9 object graph and selected transform records are decoded; schema-aware geometry conversion is not complete.',
-            'CMapMesh topology and vertex streams are inventoried but not yet reconstructed as VMF convex solids.',
-            'No playable VMF is generated from an editable VMAP by the inventory step alone.',
+            'This report is an inventory only; the separate conversion stage exports supported closed planar convex CMapMesh brushes.',
+            'Complex, open, non-planar, non-manifold, and non-convex meshes are skipped for manual model conversion.',
+            'Full Source 2 entity semantics, output behavior, shader parity, and coordinate conventions still require Hammer/game validation.',
         ]
     }
     output_dir.mkdir(parents=True,exist_ok=True)
@@ -363,8 +363,15 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                         report.counts['brushes_exported'] = geometry_result.get('exported_brush_count', 0)
                         report.counts['meshes_skipped'] = geometry_result.get('skipped_mesh_count', 0)
                         material_scan = geometry_result.get('material_scan', {})
-                        material_refs = [item.get('vmat_path') for item in material_scan.get('materials', [])
-                                         if item.get('vmat_path')]
+                        material_refs = [
+                            item.get('vmat_path') for item in material_scan.get('materials', [])
+                            if item.get('vmat_path')
+                            and not item.get('vmat_path', '').replace(chr(92), '/').lower().endswith((
+                                'materials/tools/toolsnodraw.vmat',
+                                'materials/tools/toolsinvisible.vmat',
+                                'materials/tools/toolsskybox.vmat',
+                            ))
+                        ]
                         if materials_root and material_refs:
                             progress(f'Converting {len(material_refs)} referenced VMAT material(s) and their textures…')
                             material_result = convert_vmat_references(
@@ -375,8 +382,13 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                             for item in material_result.get('results', []):
                                 source_vmat = Path(item['source_vmat'])
                                 relative = source_vmat.relative_to(materials_root).with_suffix('')
-                                key = 'materials/' + relative.as_posix() + '.vmat'
-                                material_map[key] = 's2_import/' + relative.as_posix()
+                                generated_name = 's2_import/' + relative.as_posix()
+                                source_names = [relative.as_posix() + '.vmat',
+                                                'materials/' + relative.as_posix() + '.vmat']
+                                for key in source_names:
+                                    normalized_key = key.replace('\\', '/')
+                                    material_map[normalized_key] = generated_name
+                                    material_map[normalized_key.lower()] = generated_name
                             report.counts['vmat_converted'] = material_result.get('converted_count', 0)
                             report.counts['vmat_missing'] = len(material_result.get('missing_vmat', []))
                             report.counts['material_conversion_report'] = str(output_dir / (p.stem + '_material_conversion.json'))
@@ -466,6 +478,11 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                     report.counts['entities_converted'] = entity_result.get('entity_count', 0)
                     report.counts['entity_io_connections'] = entity_result.get('connection_count', 0)
                     report.counts['entities_skipped'] = len(entity_result.get('skipped_entities', []))
+                    report.counts['entity_properties_unmapped'] = len(entity_result.get('unsupported_properties', []))
+                    if entity_result.get('unsupported_properties'):
+                        report.warnings.append(
+                            f"{len(entity_result['unsupported_properties'])} Source 2-prefixed entity property value(s) were not mapped; see {entity_json.name}."
+                        )
                     report.counts['entity_conversion_report'] = str(entity_json)
                     if entity_result.get('skipped_entities'):
                         report.warnings.append(

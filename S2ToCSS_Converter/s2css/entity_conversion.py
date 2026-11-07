@@ -7,7 +7,7 @@ _ALIASES = {
     "m_origin": "origin", "m_angles": "angles", "m_classname": "classname",
     "m_model": "model", "m_parentname": "parentname",
     "m_rendercolor": "rendercolor", "m_renderamt": "renderamt",
-    "m_spawnflags": "spawnflags", "m_startdisabled": "StartDisabled",
+    "m_spawnflags": "spawnflags", "m_startdisabled": "StartDisabled", "m_flstartdisabled": "StartDisabled",
 }
 _SKIP = {"classname", "m_editoronly", "editoronly", "m_editorclass", "m_classname",
          "m_connections", "connections", "outputs", "outputconnections",
@@ -32,11 +32,14 @@ def _find_connections(value: Any):
     found = []
     def visit(node):
         if isinstance(node, dict):
-            lowered = {str(k).lower(): v for k, v in node.items()}
+            attrs = node.get("attributes") if isinstance(node.get("attributes"), dict) else {}
+            merged = dict(attrs)
+            merged.update(node)
+            lowered = {str(k).lower(): v for k, v in merged.items()}
             if any(k in lowered for k in ("output", "outputname", "m_outputname")) and any(
-                k in lowered for k in ("target", "targetname", "m_targetname", "input", "inputname", "m_inputname")
+                k in lowered for k in ("target", "targetname", "m_targetname", "m_target", "input", "inputname", "m_inputname")
             ):
-                found.append(node)
+                found.append(merged)
                 return
             for child in node.values():
                 if isinstance(child, (dict, list)): visit(child)
@@ -52,12 +55,12 @@ def _connection_fields(record: dict) -> dict | None:
             if key in low: return low[key]
         return default
     output = get("output", "outputname", "m_outputname")
-    target = get("target", "targetname", "m_targetname")
+    target = get("target", "targetname", "m_targetname", "m_target")
     input_name = get("input", "inputname", "m_inputname")
     if not all(isinstance(x, str) and x.strip() for x in (output, target, input_name)): return None
-    parameter = get("parameter", "param", "m_parameter", "parameteroverride")
-    delay = get("delay", "m_delay", default=0)
-    times = get("times_to_fire", "timesfired", "m_times_to_fire", default=-1)
+    parameter = get("parameter", "param", "m_parameter", "parameteroverride", "m_overrideparam")
+    delay = get("delay", "m_delay", "m_fldelay", default=0)
+    times = get("times_to_fire", "timesfired", "m_times_to_fire", "m_ntimestofire", default=-1)
     return {"output": output, "target": target, "input": input_name,
             "parameter": _scalar(parameter) or "", "delay": _scalar(delay) or "0",
             "times": _scalar(times) or "-1"}
@@ -67,11 +70,17 @@ def _find_model_value(props: dict) -> bool:
                for k, v in props.items())
 
 def build_entity_conversion(records: list[dict]) -> dict:
-    entities, skipped = [], []
+    entities, skipped, unsupported_properties = [], [], []
     for record in records:
         if record.get("class") != "CMapEntity": continue
         props = record.get("entity_properties")
         if not isinstance(props, dict): continue
+        node_attrs = record.get("entity_node_attributes")
+        if isinstance(node_attrs, dict):
+            # Node-level properties can contain outputs/connections on some VMAP versions.
+            for key, value in node_attrs.items():
+                if key not in props and key.lower() in {"connections", "outputs", "m_connections", "outputconnections"}:
+                    props[key] = value
         raw_class = props.get("classname", props.get("m_className", props.get("m_ClassName", "")))
         classname = str(raw_class).strip().lower()
         if not classname: continue
@@ -89,6 +98,9 @@ def build_entity_conversion(records: list[dict]) -> dict:
             if normalized.lower() in {"origin", "angles", "model"} and classname.startswith("prop_"): continue
             scalar = _scalar(value)
             if scalar is None or normalized.lower() in {"id", "classname"}: continue
+            if str(key).lower().startswith("m_") and str(key).lower() not in _ALIASES:
+                unsupported_properties.append({"element_index": record.get("index"), "classname": classname, "property": str(key), "value": scalar})
+                continue
             keys[normalized] = scalar
         connections = []
         for connection in _find_connections(props):
@@ -96,7 +108,7 @@ def build_entity_conversion(records: list[dict]) -> dict:
             if parsed: connections.append(parsed)
         if connections: keys["__connections__"] = connections
         entities.append(keys)
-    return {"entities": entities, "skipped_entities": skipped,
+    return {"entities": entities, "skipped_entities": skipped, "unsupported_properties": unsupported_properties,
             "entity_count": len(entities),
             "connection_count": sum(len(e.get("__connections__", [])) for e in entities)}
 

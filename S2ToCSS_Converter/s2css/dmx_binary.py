@@ -154,6 +154,36 @@ def _json_safe_attrs(attrs,elements):
         else: out[k]=resolve_value(v,elements)
     return out
 
+def _resolve_entity_refs(value, elements, seen=None, depth=0):
+    """Resolve only entity connection references, with cycle/depth guards."""
+    if seen is None: seen = set()
+    if depth > 12: return "<entity reference depth limit>"
+    if isinstance(value, dict) and "element_index" in value:
+        index = value.get("element_index")
+        if not isinstance(index, int) or not (0 <= index < len(elements)): return value
+        if index in seen: return {"element_index": index, "cycle": True}
+        element = elements[index]
+        next_seen = set(seen)
+        next_seen.add(index)
+        return {"element_index": index, "type": element.get("type"),
+                "name": element.get("name"),
+                "attributes": {k: _resolve_entity_refs(v, elements, next_seen, depth + 1)
+                               for k, v in element.get("attributes", {}).items()}}
+    if isinstance(value, dict):
+        return {k: _resolve_entity_refs(v, elements, seen, depth + 1) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_resolve_entity_refs(v, elements, seen, depth + 1) for v in value]
+    return value
+
+
+def _entity_safe_attrs(attrs, elements):
+    safe = _json_safe_attrs(attrs, elements)
+    for key, value in attrs.items():
+        if "connection" in str(key).lower() or "output" in str(key).lower():
+            safe[key] = _resolve_entity_refs(value, elements)
+    return safe
+
+
 def extract_transform_records(graph):
     """Extract actual map-node transform records from the generic DMX graph."""
     elements=graph['elements']; rows=[]
@@ -183,13 +213,13 @@ def extract_transform_records(graph):
         if e['type'] == 'CMapEntity':
             # Keep the complete node-level attribute tree as well: some Hammer versions
             # serialize output connections beside entity_properties rather than inside it.
-            row['entity_node_attributes'] = _json_safe_attrs(a, elements)
+            row['entity_node_attributes'] = _entity_safe_attrs(a, elements)
         # Resolve entity_properties to capture Source 2 entity class/model path where present.
         ep=a.get('entity_properties')
         if isinstance(ep,dict) and 'element_index' in ep and 0<=ep['element_index']<len(elements):
             ee=elements[ep['element_index']]
             row['entity_properties_class']=ee['type']
-            row['entity_properties']=_json_safe_attrs(ee['attributes'],elements)
+            row['entity_properties']=_entity_safe_attrs(ee['attributes'],elements)
         rows.append(row)
     return rows
 

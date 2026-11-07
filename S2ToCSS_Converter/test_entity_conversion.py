@@ -10,8 +10,12 @@ class EntityConversionTests(unittest.TestCase):
             "index": 12, "class": "CMapEntity", "origin": [1, 2, 3], "angles": [0, 90, 0],
             "entity_properties": {
                 "classname": "logic_relay", "targetname": "relay_start", "StartDisabled": False,
-                "connections": [{"output": "OnTrigger", "target": "door_1", "input": "Open",
-                                "parameter": "", "delay": 0.25, "times_to_fire": -1}],
+            },
+            "entity_node_attributes": {
+                "connections": [{"type": "DmeConnection", "attributes": {
+                    "m_outputName": "OnTrigger", "m_targetName": "door_1", "m_inputName": "Open",
+                    "m_overrideParam": "", "m_flDelay": 0.25, "m_nTimesToFire": -1,
+                }}],
             },
         }]
         result = build_entity_conversion(records)

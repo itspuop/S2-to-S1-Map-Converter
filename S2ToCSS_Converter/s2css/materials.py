@@ -10,11 +10,9 @@ from typing import Any
 
 _TOKEN = re.compile(r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|[{}]|[^\s{}]+')
 _TEXTURE_KEYS = {
-    "g_tcolor": "$basetexture", "g_tcolor1": "$basetexture",
+    "g_tcolor": "$basetexture",
     "g_tnormal": "$bumpmap", "g_tnormalmap": "$bumpmap",
     "g_tselfillummask": "$selfillummask", "g_temissive": "$selfillummask",
-    "g_tambientocclusion": "$ambientocclusiontexture",
-    "g_troughness": "$phongexponenttexture", "g_tmetalness": "$metalness",
     "g_tdetail": "$detail",
 }
 _SCALAR_KEYS = {
@@ -28,7 +26,7 @@ _BOOL_KEYS = {"g_balphatest": "$alphatest", "g_btranslucent": "$translucent",
 
 def _unquote(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] == '"':
-        return bytes(value[1:-1], "utf-8").decode("unicode_escape")
+        return value[1:-1]
     return value
 
 def parse_keyvalues(text: str) -> dict[str, Any]:
@@ -77,9 +75,24 @@ def _truth(value: Any) -> str:
 
 def _texture_reference(value: Any) -> str:
     path = str(value).strip().replace("\\", "/").strip('"')
+    path = re.sub(r"(?i)^(resource:|file:)", "", path)
     path = re.sub(r"(?i)^materials/", "", path)
     path = re.sub(r"(?i)\.(vtex|vtex_c|tga|png|jpg|jpeg|psd|vtf)$", "", path)
     return path.strip("/")
+
+def _parameter_records(value: Any):
+    if isinstance(value, dict):
+        keys = {str(k).lower(): v for k, v in value.items()}
+        name = keys.get("m_name", keys.get("name"))
+        value_keys = ("m_pvalue", "m_flvalue", "m_nvalue", "m_vvalue",
+                      "m_cvalue", "m_bvalue", "m_value", "value")
+        selected = next((keys[k] for k in value_keys if k in keys), None)
+        if isinstance(name, str) and selected is not None:
+            yield name, selected
+        for child in value.values():
+            yield from _parameter_records(child)
+    elif isinstance(value, list):
+        for child in value: yield from _parameter_records(child)
 
 def _resolve_vmat(root: Path, ref: str) -> Path | None:
     rel = ref.replace("\\", "/").lstrip("/")
@@ -148,7 +161,7 @@ def convert_vmat_file(vmat_path: Path, materials_root: Path, output_root: Path,
         if low in _TEXTURE_KEYS:
             tex = _texture_reference(value)
             if tex:
-                params[_TEXTURE_KEYS[low]] = tex
+                params[_TEXTURE_KEYS[low]] = "s2_import/" + tex
                 texture_values.append(str(value))
         elif low in _SCALAR_KEYS:
             params[_SCALAR_KEYS[low]] = _truth(value)
@@ -158,6 +171,26 @@ def convert_vmat_file(vmat_path: Path, materials_root: Path, output_root: Path,
             continue
         elif low.startswith(("g_t", "g_fl", "g_b", "g_v", "g_c")):
             unknown.append({"key": path, "value": value})
+    # Modern text KV3 stores shader inputs as arrays of {m_name, m_pValue/...} records.
+    for parameter_name, parameter_value in _parameter_records(tree):
+        low = parameter_name.lower()
+        if low in _TEXTURE_KEYS:
+            tex = _texture_reference(parameter_value)
+            if tex:
+                params[_TEXTURE_KEYS[low]] = "s2_import/" + tex
+                texture_values.append(str(parameter_value))
+        elif low in _SCALAR_KEYS:
+            params[_SCALAR_KEYS[low]] = _truth(parameter_value)
+        elif low in _BOOL_KEYS:
+            params[_BOOL_KEYS[low]] = _truth(parameter_value)
+        elif low in {"f_alpha_test", "alpha_test"}:
+            params["$alphatest"] = _truth(parameter_value)
+        elif low in {"f_translucent", "translucent"}:
+            params["$translucent"] = _truth(parameter_value)
+        elif low in {"f_self_illum", "self_illum"}:
+            params["$selfillum"] = _truth(parameter_value)
+        elif low.startswith(("g_t", "g_fl", "g_b", "g_v", "g_c", "f_")):
+            unknown.append({"key": parameter_name, "value": parameter_value})
     if "$basetexture" not in params:
         warnings.append(f"{vmat_path.name}: no recognized base-color texture parameter; VMT may render as a fallback.")
     for texture in dict.fromkeys(texture_values):

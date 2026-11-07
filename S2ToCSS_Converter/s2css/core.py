@@ -12,7 +12,8 @@ from .dmx_binary import parse_binary_v9, summarize_graph, extract_transform_reco
 from .model_inventory import build_model_instance_inventory, write_model_instance_inventory
 from .model_pipeline import process_model_instances, build_prop_entities
 from .vmap_export import export_vmap_to_vmf
-from .vmap_export import export_vmap_to_vmf
+from .materials import convert_vmat_references
+from .entity_conversion import build_entity_conversion, append_entity_blocks
 
 @dataclass
 class Report:
@@ -361,6 +362,39 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                         report.counts['cmapmesh_nodes'] = geometry_result.get('cmapmesh_count', 0)
                         report.counts['brushes_exported'] = geometry_result.get('exported_brush_count', 0)
                         report.counts['meshes_skipped'] = geometry_result.get('skipped_mesh_count', 0)
+                        material_scan = geometry_result.get('material_scan', {})
+                        material_refs = [item.get('vmat_path') for item in material_scan.get('materials', [])
+                                         if item.get('vmat_path')]
+                        if materials_root and material_refs:
+                            progress(f'Converting {len(material_refs)} referenced VMAT material(s) and their textures…')
+                            material_result = convert_vmat_references(
+                                material_refs, materials_root, output_dir / 'materials' / 's2_import',
+                                vtfcmd or (toolchain or {}).get('vtfcmd', '')
+                            )
+                            material_map = {}
+                            for item in material_result.get('results', []):
+                                source_vmat = Path(item['source_vmat'])
+                                relative = source_vmat.relative_to(materials_root).with_suffix('')
+                                key = 'materials/' + relative.as_posix() + '.vmat'
+                                material_map[key] = 's2_import/' + relative.as_posix()
+                            report.counts['vmat_converted'] = material_result.get('converted_count', 0)
+                            report.counts['vmat_missing'] = len(material_result.get('missing_vmat', []))
+                            report.counts['material_conversion_report'] = str(output_dir / (p.stem + '_material_conversion.json'))
+                            (output_dir / (p.stem + '_material_conversion.json')).write_text(
+                                json.dumps(material_result, indent=2), encoding='utf-8'
+                            )
+                            report.warnings.extend(material_result.get('warnings', []))
+                            report.warnings.extend(material_result.get('limitations', []))
+                            # Re-run the VMAP exporter with generated VMT names so face slots use them.
+                            if material_map:
+                                progress('Applying generated VMT names to VMF face material assignments…')
+                                # The exporter accepts an explicit map file; write the generated map temporarily.
+                                generated_map = output_dir / (p.stem + '_generated_material_map.json')
+                                generated_map.write_text(json.dumps({'material_map': material_map}, indent=2), encoding='utf-8')
+                                geometry_result = export_vmap_to_vmf(
+                                    p, geometry_vmf, geometry_report, materials_root, generated_map
+                                )
+                                generated_map.unlink(missing_ok=True)
                         report.counts.setdefault('mesh_reports', []).append(str(geometry_report))
                         skipped_meshes = [
                             item for item in geometry_result.get('meshes', [])
@@ -425,6 +459,27 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                                 'mesh_face_count':row.get('mesh_face_count'),'mesh_vertex_count':row.get('mesh_vertex_count'),'mesh_materials':';'.join(row.get('mesh_materials') or []),
                                 'entity_properties_class':row.get('entity_properties_class')})
                     report.counts.setdefault('transform_csv_outputs',[]).append(str(csv_path))
+                    # Convert non-model Hammer entities and any structured output connections.
+                    entity_result = build_entity_conversion(inv.get('dmx_transform_records', []))
+                    entity_json = output_dir / (p.stem + '_entity_conversion.json')
+                    entity_json.write_text(json.dumps(entity_result, indent=2), encoding='utf-8')
+                    report.counts['entities_converted'] = entity_result.get('entity_count', 0)
+                    report.counts['entity_io_connections'] = entity_result.get('connection_count', 0)
+                    report.counts['entities_skipped'] = len(entity_result.get('skipped_entities', []))
+                    report.counts['entity_conversion_report'] = str(entity_json)
+                    if entity_result.get('skipped_entities'):
+                        report.warnings.append(
+                            f"{len(entity_result['skipped_entities'])} entity class(es) were not emitted; see {entity_json.name}."
+                        )
+                    converted_entities = entity_result.get('entities', [])
+                    if converted_entities:
+                        entity_target = geometry_vmf if geometry_success and geometry_vmf and geometry_vmf.is_file() else output_dir / (p.stem + '_entities.vmf')
+                        if entity_target != geometry_vmf and not entity_target.exists():
+                            write_world_vmf(entity_target, p.stem, [], [])
+                        appended = append_entity_blocks(entity_target, converted_entities)
+                        report.counts['entities_written_to_vmf'] = appended
+                        report.counts.setdefault('vmf_outputs', []).append(str(entity_target)) if str(entity_target) not in report.counts.get('vmf_outputs', []) else None
+                        progress(f'Wrote {appended} Source 1 entity/entities and {entity_result.get("connection_count", 0)} I/O connection(s).')
                     progress(f'DMX parse complete: {inv.get("dmx_element_count",0)} elements; {inv.get("dmx_transform_record_count",0)} transform records.')
             elif kind=='compiled_vmap':
                 report.warnings.append(f'{p.name}: compiled VMAP detected. This converter does not require compiled maps; select the editable .vmap and its associated assets for native parsing.')

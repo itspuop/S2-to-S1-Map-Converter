@@ -1,0 +1,122 @@
+"""Source 2 VMAP entity and I/O conversion helpers."""
+from __future__ import annotations
+from typing import Any
+
+_ALIASES = {
+    "m_targetname": "targetname", "m_name": "targetname",
+    "m_origin": "origin", "m_angles": "angles", "m_classname": "classname",
+    "m_model": "model", "m_parentname": "parentname",
+    "m_rendercolor": "rendercolor", "m_renderamt": "renderamt",
+    "m_spawnflags": "spawnflags", "m_startdisabled": "StartDisabled",
+}
+_SKIP = {"classname", "m_editoronly", "editoronly", "m_editorclass", "m_classname",
+         "m_connections", "connections", "outputs", "outputconnections",
+         "m_entityname", "m_entityid", "m_entityproperties"}
+_ALLOWED_PREFIXES = ("logic_", "trigger_", "func_", "info_", "point_", "env_",
+                     "filter_", "path_", "move_", "game_", "npc_", "weapon_")
+_ALLOWED_EXACT = {"light", "worldspawn", "ambient_generic", "prop_detail",
+                  "prop_static", "prop_dynamic", "prop_dynamic_override",
+                  "prop_physics", "prop_physics_override", "prop_physics_multiplayer"}
+
+def _scalar(value: Any) -> str | None:
+    if isinstance(value, bool): return "1" if value else "0"
+    if isinstance(value, (str, int, float)): return str(value)
+    if isinstance(value, (list, tuple)) and len(value) in (2, 3, 4) and all(isinstance(x, (int, float)) for x in value):
+        return " ".join(str(x) for x in value)
+    return None
+
+def _norm_key(key: str) -> str:
+    return _ALIASES.get(key.strip().lower(), key[2:] if key.lower().startswith("m_") else key)
+
+def _find_connections(value: Any):
+    found = []
+    def visit(node):
+        if isinstance(node, dict):
+            lowered = {str(k).lower(): v for k, v in node.items()}
+            if any(k in lowered for k in ("output", "outputname", "m_outputname")) and any(
+                k in lowered for k in ("target", "targetname", "m_targetname", "input", "inputname", "m_inputname")
+            ):
+                found.append(node)
+                return
+            for child in node.values():
+                if isinstance(child, (dict, list)): visit(child)
+        elif isinstance(node, list):
+            for child in node: visit(child)
+    visit(value)
+    return found
+
+def _connection_fields(record: dict) -> dict | None:
+    low = {str(k).lower(): v for k, v in record.items()}
+    def get(*keys, default=""):
+        for key in keys:
+            if key in low: return low[key]
+        return default
+    output = get("output", "outputname", "m_outputname")
+    target = get("target", "targetname", "m_targetname")
+    input_name = get("input", "inputname", "m_inputname")
+    if not all(isinstance(x, str) and x.strip() for x in (output, target, input_name)): return None
+    parameter = get("parameter", "param", "m_parameter", "parameteroverride")
+    delay = get("delay", "m_delay", default=0)
+    times = get("times_to_fire", "timesfired", "m_times_to_fire", default=-1)
+    return {"output": output, "target": target, "input": input_name,
+            "parameter": _scalar(parameter) or "", "delay": _scalar(delay) or "0",
+            "times": _scalar(times) or "-1"}
+
+def _find_model_value(props: dict) -> bool:
+    return any(str(k).lower() in {"model", "m_model"} and isinstance(v, str) and ".vmdl" in v.lower()
+               for k, v in props.items())
+
+def build_entity_conversion(records: list[dict]) -> dict:
+    entities, skipped = [], []
+    for record in records:
+        if record.get("class") != "CMapEntity": continue
+        props = record.get("entity_properties")
+        if not isinstance(props, dict): continue
+        raw_class = props.get("classname", props.get("m_className", props.get("m_ClassName", "")))
+        classname = str(raw_class).strip().lower()
+        if not classname: continue
+        if not (classname in _ALLOWED_EXACT or classname.startswith(_ALLOWED_PREFIXES)):
+            skipped.append({"element_index": record.get("index"), "classname": classname,
+                            "reason": "Class is not in the conservative Source 1 passthrough allowlist."})
+            continue
+        if classname.startswith("prop_") and _find_model_value(props): continue
+        keys = {"id": str(20000 + int(record.get("index") or 0)), "classname": classname}
+        if record.get("origin") is not None: keys["origin"] = _scalar(record["origin"]) or ""
+        if record.get("angles") is not None: keys["angles"] = _scalar(record["angles"]) or ""
+        for key, value in props.items():
+            normalized = _norm_key(str(key))
+            if str(key).lower() in _SKIP or normalized.lower() in _SKIP: continue
+            if normalized.lower() in {"origin", "angles", "model"} and classname.startswith("prop_"): continue
+            scalar = _scalar(value)
+            if scalar is None or normalized.lower() in {"id", "classname"}: continue
+            keys[normalized] = scalar
+        connections = []
+        for connection in _find_connections(props):
+            parsed = _connection_fields(connection)
+            if parsed: connections.append(parsed)
+        if connections: keys["__connections__"] = connections
+        entities.append(keys)
+    return {"entities": entities, "skipped_entities": skipped,
+            "entity_count": len(entities),
+            "connection_count": sum(len(e.get("__connections__", [])) for e in entities)}
+
+def append_entity_blocks(vmf_path, entities: list[dict]) -> int:
+    count = 0
+    with open(vmf_path, "a", encoding="utf-8", newline="\n") as handle:
+        for entity in entities:
+            connections = entity.get("__connections__", [])
+            handle.write("entity\n{\n")
+            for key, value in entity.items():
+                if key == "__connections__": continue
+                escaped_key = str(key).replace('"', '\\"')
+                escaped_value = str(value).replace('"', '\\"')
+                handle.write(f' "{escaped_key}" "{escaped_value}"\n')
+            if connections:
+                handle.write(" connections\n {\n")
+                for c in connections:
+                    value = ",".join((c["target"], c["input"], c["parameter"], c["delay"], c["times"]))
+                    handle.write(f'  "{c["output"]}" "{value}"\n')
+                handle.write(" }\n")
+            handle.write("}\n")
+            count += 1
+    return count

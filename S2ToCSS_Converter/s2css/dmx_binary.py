@@ -180,6 +180,10 @@ def extract_transform_records(graph):
                 row['mesh_vertex_count']=_stream_size(elements,ma.get('vertexData'))
                 row['mesh_face_vertex_count']=_stream_size(elements,ma.get('faceVertexData'))
                 row['mesh_face_count']=len(ma.get('faceEdgeIndices',[]))
+        if e['type'] == 'CMapEntity':
+            # Keep the complete node-level attribute tree as well: some Hammer versions
+            # serialize output connections beside entity_properties rather than inside it.
+            row['entity_node_attributes'] = _json_safe_attrs(a, elements)
         # Resolve entity_properties to capture Source 2 entity class/model path where present.
         ep=a.get('entity_properties')
         if isinstance(ep,dict) and 'element_index' in ep and 0<=ep['element_index']<len(elements):

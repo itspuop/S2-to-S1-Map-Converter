@@ -108,7 +108,7 @@ guaranteed one-click playable-map conversion for every VMAP.
 Run the expanded tests with:
 
 ```bat
-py -m unittest test_model_inventory test_model_pipeline test_mesh_decode test_mesh_validate test_vmf_export test_mesh_schema
+py -m unittest test_model_inventory test_model_pipeline test_mesh_decode test_mesh_validate test_vmf_export test_mesh_schema test_material_conversion test_entity_conversion
 py test_smoke.py
 ```
 
@@ -193,6 +193,34 @@ py -m unittest test_model_inventory.py
 ## Current limitations
 
 This branch now creates a partial VMF from safe convex CMapMesh geometry and successfully compiled model props. It is not a guaranteed complete playable-map converter: unsupported meshes are skipped, model transforms still need Hammer validation, and Source 2 entity/I/O conversion, displacements, overlays, and full VMAT shader/texture translation remain unfinished.
+
+## VMAT, VMT, entities, and I/O (new development stage)
+
+The converter now has an initial automatic VMAT-to-VMT stage for referenced map
+materials. It reads text VMAT/KV3 key/value blocks, maps recognized color/normal/
+emissive and selected scalar inputs, writes VMTs under
+`materials/s2_import/`, and resolves loose raster/VTF texture dependencies.
+When VTFCmd is configured, loose raster textures are compiled to VTF. Generated
+VMT names are fed back into per-face VMF material assignment.
+
+This is a compatibility layer, not a complete Source 2 shader reimplementation.
+Unknown shader parameters are recorded in `*_material_conversion.json`; missing
+VMATs, unavailable textures, and VTEX/VTEX_C extraction limitations are reported.
+Review the generated VMTs in Hammer and in-game.
+
+The entity stage now attempts conservative passthrough of common Source 1
+`logic_`, `trigger_`, `func_`, `info_`, `point_`, `env_`, and related entity
+classes. It preserves scalar keyvalues and transforms, skips model-backed props
+already handled by the compiled-model pipeline, and writes
+`*_entity_conversion.json` with skipped classes. Structured output records with
+recognizable output/target/input fields are serialized into VMF `connections`
+blocks, preserving parameter, delay, and fire count.
+
+Entity and I/O conversion remains schema-dependent: unsupported Source 2 entity
+classes and connection encodings are not guessed. Coordinate/angle conventions,
+entity-specific Source 2 behavior, keyvalue differences, and output target
+resolution still require real-map Hammer testing. The report is the authoritative
+record of what was emitted or skipped.
 
 ## Tests
 

@@ -21,7 +21,7 @@ jobs:
         run: python -m compileall -q s2css
       - name: Run unit tests
         working-directory: S2ToCSS_Converter
-        run: python -m unittest -v test_model_inventory test_model_pipeline test_mesh_decode test_mesh_validate test_vmf_export test_mesh_schema
+        run: python -m unittest -v test_model_inventory test_model_pipeline test_mesh_decode test_mesh_validate test_vmf_export test_mesh_schema test_material_conversion test_entity_conversion
       - name: Run smoke tests
         working-directory: S2ToCSS_Converter
         run: python test_smoke.py

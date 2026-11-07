@@ -71,6 +71,17 @@ class ModelPipelineTests(unittest.TestCase):
         self.assertEqual(entities[0]["skin"], "1")
         self.assertEqual(entities[0]["model"], "models/s2_import/crate_static.mdl")
 
+    def test_dynamic_override_uses_dynamic_model_variant(self):
+        rows = [{
+            "source_model": "models/props/crate.vmdl",
+            "source_entity_class": "prop_dynamic_override",
+            "origin": [0, 0, 0], "angles": [0, 0, 0], "scales": [1, 1, 1],
+        }]
+        compiled = {"models/props/crate.vmdl": {"dynamic": "models/s2_import/crate_dynamic.mdl"}}
+        entities = build_prop_entities(rows, compiled, [])
+        self.assertEqual(entities[0]["classname"], "prop_dynamic_override")
+        self.assertEqual(entities[0]["model"], "models/s2_import/crate_dynamic.mdl")
+
     def test_non_unit_scale_is_skipped_for_css(self):
         rows = [{
             "source_model": "models/props/crate.vmdl",

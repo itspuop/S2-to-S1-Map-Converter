@@ -42,22 +42,15 @@ the converter stages matching outputs under `models/s2_import` in the output
 folder. Ensure the game directory is writable and back up any files with colliding
 names before compiling.
 
-### Important current boundaries
+### Model pipeline boundaries
 
-This is an integration milestone, **not yet a complete playable-map converter**.
-The model entity VMF is deliberately separate from the world geometry VMF because
-native `CMapMesh` vertex streams, polygon topology, and convex brush reconstruction
-are not yet complete. VMAP model positions and angles are currently passed through
-unchanged; compare them in Hammer before treating the coordinate/rotation mapping
-as certified. Non-unit model scales are skipped rather than written to unsupported CS:S prop scale keys; per-scale baked model variants remain future work.
-Material translation and complete Source 2 entity/I/O conversion also remain
+The model pipeline is now integrated with the VMAP brush exporter described below.
+Model prop positions and angles are currently passed through unchanged; compare
+representative placements in Hammer before treating the coordinate/rotation
+mapping as certified. Non-unit model scales are skipped rather than written to
+unsupported CS:S prop scale keys; per-scale baked model variants remain future
+work. Full material translation and Source 2 entity/I/O conversion remain
 unfinished.
-
-Run the new pure-Python pipeline tests with:
-
-```bat
-py -m unittest test_model_pipeline.py
-```
 
 ## v0.9 development: integrated VMAP brushes and model props
 

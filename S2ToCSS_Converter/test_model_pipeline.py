@@ -88,14 +88,15 @@ class ModelPipelineTests(unittest.TestCase):
 
     def test_normalizes_binary_seqids_header_without_changing_payload(self):
         payload = b"binary-data"
-        source = b"<!-- dmx encoding binary_seqids 9 format model 22 -->\n\x00" + payload
+        header = b"<!-- dmx encoding binary_seqids 9 format model 22 -->"
+        source = header + bytes([10, 0]) + payload
         normalized = blender_compatible_dmx_bytes(source)
         self.assertIn(b"dmx encoding binary 9 format model 22", normalized)
         self.assertTrue(normalized.endswith(payload))
-        self.assertEqual(source.split(b"\x00", 1)[1], payload)
+        self.assertEqual(source.split(bytes([0]), 1)[1], payload)
 
     def test_leaves_regular_binary_dmx_unchanged(self):
-        source = b"<!-- dmx encoding binary 9 format model 22 -->\n\x00payload"
+        source = b"<!-- dmx encoding binary 9 format model 22 -->" + bytes([10, 0]) + b"payload"
         self.assertIs(blender_compatible_dmx_bytes(source), source)
 
     def test_normalizes_vmat_paths_in_smd_triangle_materials(self):

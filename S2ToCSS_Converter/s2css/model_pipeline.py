@@ -72,11 +72,27 @@ def find_model_source(project_root: str | Path, source_model: str) -> tuple[Path
     except OSError:
         pass
     def source_rank(path: Path):
+        # Prefer renderable geometry over physics/collision/animation sidecars.
+        # Within render candidates, prefer LOD0, then an unnumbered source, then
+        # higher LODs. DMX remains the tie-breaker over FBX for otherwise equal
+        # candidates because it retains Source 2 material assignments more often.
         stem = path.stem.lower()
+        tokens = set(stem.replace("-", "_").split("_"))
+        non_render = bool(tokens & {
+            "physics", "phys", "collision", "collider", "hitbox", "hull",
+            "skeleton", "skele", "animation", "anim", "ragdoll",
+        })
+        lod_tokens = [token for token in tokens if token.startswith("lod") and token[3:].isdigit()]
+        if not lod_tokens:
+            lod_rank = 1
+        else:
+            lod_rank = 0 if "lod0" in lod_tokens else 2
+        render_hint = 0 if tokens & {"body", "mesh", "render", "model"} else 1
         return (
+            1 if non_render else 0,
+            lod_rank,
+            render_hint,
             0 if path.suffix.lower() == ".dmx" else 1,
-            0 if "lod0" in stem else 1,
-            0 if "body" in stem else 1,
             len(stem),
             str(path).lower(),
         )

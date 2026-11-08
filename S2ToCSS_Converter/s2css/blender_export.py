@@ -107,6 +107,13 @@ def main():
         active.select_set(True)
         bpy.context.view_layer.objects.active = active
 
+        # Blender Source Tools may remove/rebuild the exported object during its
+        # operator. Capture all RNA-backed metadata before export so the success
+        # path never dereferences a removed Object/ Mesh afterwards.
+        mesh_objects_imported = len(meshes)
+        vertex_count = len(active.data.vertices)
+        polygon_count = len(active.data.polygons)
+
         result = bpy.ops.export_scene.smd(export_scene=True)
         if "FINISHED" not in result:
             raise RuntimeError(f"Blender Source Tools export returned {result!r}")
@@ -124,9 +131,9 @@ def main():
             "material_path_changes": material_path_changes,
             "source_file": str(source),
             "smd_file": str(expected),
-            "mesh_objects_imported": len(meshes),
-            "vertex_count": len(active.data.vertices),
-            "polygon_count": len(active.data.polygons),
+            "mesh_objects_imported": mesh_objects_imported,
+            "vertex_count": vertex_count,
+            "polygon_count": polygon_count,
             "blender_version": bpy.app.version_string,
             "source_tools_export_operator": "export_scene.smd",
         }

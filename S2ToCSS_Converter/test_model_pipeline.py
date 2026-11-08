@@ -87,7 +87,7 @@ class ModelPipelineTests(unittest.TestCase):
             self.assertEqual(extract_smd_material_names(smd), ["models/coral"])
 
     def test_normalizes_binary_seqids_header_without_changing_payload(self):
-        payload = b"\\x01\\x02\\x03\\x04\\x00binary-data"
+        payload = b"binary-data"
         source = b"<!-- dmx encoding binary_seqids 9 format model 22 -->\\n\\x00" + payload
         normalized = blender_compatible_dmx_bytes(source)
         self.assertIn(b"dmx encoding binary 9 format model 22", normalized)

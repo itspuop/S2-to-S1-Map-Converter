@@ -9,6 +9,7 @@ from s2css.model_pipeline import (
     find_model_source,
     safe_name,
     write_qc,
+    resolve_studiomdl_executable,
 )
 
 from s2css.blender_export import blender_compatible_dmx_bytes, normalize_smd_material_paths
@@ -60,6 +61,23 @@ class ModelPipelineTests(unittest.TestCase):
             fbx.write_bytes(b"fbx")
             chosen, _ = find_model_source(root, "models/props/crate.vmdl")
             self.assertEqual(chosen, fbx)
+
+    def test_auto_detects_studiomdl_in_css_sibling_bin_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            game = root / "Counter-Strike Source" / "cstrike"
+            compiler = root / "Counter-Strike Source" / "bin" / "studiomdl.exe"
+            game.mkdir(parents=True)
+            compiler.parent.mkdir(parents=True)
+            compiler.write_bytes(b"exe")
+            self.assertEqual(resolve_studiomdl_executable("", game), str(compiler))
+
+    def test_prefers_configured_studiomdl_executable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            compiler = Path(tmp) / "custom" / "studiomdl.exe"
+            compiler.parent.mkdir()
+            compiler.write_bytes(b"exe")
+            self.assertEqual(resolve_studiomdl_executable(compiler, ""), str(compiler))
 
     def test_qc_has_staticprop_and_collision_block(self):
         with tempfile.TemporaryDirectory() as tmp:

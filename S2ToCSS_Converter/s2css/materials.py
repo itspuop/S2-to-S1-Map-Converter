@@ -70,10 +70,15 @@ def parse_keyvalues(text: str) -> dict[str, Any]:
     return mapping()
 
 _TEXTURE_KEYS = {
+    # Native VMAT parameter names.
     "g_tcolor": "$basetexture",
     "g_tnormal": "$bumpmap", "g_tnormalmap": "$bumpmap",
     "g_tselfillummask": "$selfillummask", "g_temissive": "$selfillummask",
     "g_tdetail": "$detail",
+    # Names emitted by legacy Source 2 VMAT decompilers for the same inputs.
+    "texturecolor": "$basetexture", "texturecolor0": "$basetexture",
+    "texturecolortranslucency": "$basetexture",
+    "texturenormal": "$bumpmap", "texturedetail": "$detail",
 }
 _SCALAR_KEYS = {
     "g_flalphatestreference": "$alphatestreference",

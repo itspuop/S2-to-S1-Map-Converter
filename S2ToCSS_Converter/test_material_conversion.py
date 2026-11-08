@@ -74,6 +74,27 @@ class MaterialConversionTests(unittest.TestCase):
             self.assertTrue((out / "props" / "stone.vmt").is_file())
             self.assertTrue((out / "props" / "stone_color.tga").is_file())
 
+    def test_recognizes_legacy_texturecolor_and_texturenormal_aliases(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "materials"
+            out = Path(tmp) / "out" / "materials" / "s2_import"
+            (root / "models").mkdir(parents=True)
+            (root / "models" / "legacy.vmat").write_text(
+                '{ m_shaderName = "csgo_complex.vfx" m_textureParams = [ '
+                '{ m_name = "TextureColor" m_pValue = resource:"materials/models/albedo.png" } '
+                '{ m_name = "TextureNormal" m_pValue = resource:"materials/models/normal.png" } '
+                '{ m_name = "TextureDetail" m_pValue = resource:"materials/models/detail.png" } ] }',
+                encoding="utf-8",
+            )
+            for name in ("albedo", "normal", "detail"):
+                (root / "models" / f"{name}.png").write_bytes(b"image")
+            result = convert_vmat_references(["materials/models/legacy.vmat"], root, out)
+            self.assertEqual(result["converted_count"], 1)
+            params = result["results"][0]["parameters"]
+            self.assertEqual(params["$basetexture"], "s2_import/models/albedo")
+            self.assertEqual(params["$bumpmap"], "s2_import/models/normal")
+            self.assertEqual(params["$detail"], "s2_import/models/detail")
+
     def test_model_materials_use_vertexlitgeneric(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp) / "materials"

@@ -169,7 +169,9 @@ compiled successfully. Candidate selection prefers render meshes and LOD0 over
 physics/collision sidecars. For Source 2 `binary_seqids` DMX files, the exporter
 normalizes only the temporary import copy's header; the original asset is left
 untouched. If the toolchain is not configured, the inventory is still written
-and the model manifest records which stages are pending.
+and the model manifest records which stages are pending. When the CS:S game
+folder is selected but the compiler field is blank, the pipeline also checks
+the standard sibling `bin/studiomdl.exe` locations automatically.
 
 Transform values and selected entity properties are preserved exactly as decoded
 from the VMAP. The inventory records the source entity class (e.g. `prop_static`
@@ -216,6 +218,8 @@ extraction remains unsupported. The resolver
 checks the selected addon materials folder and the shared content/game material roots
 reported by the VMAP scan. Referenced model DMX files are scanned for their own VMAT
 dependencies as well, so prop materials are included even when absent from world brushes.
+Legacy decompiler aliases such as `TextureColor`, `TextureNormal`, and
+`TextureDetail` are also recognized alongside native `g_t*` VMAT parameters.
 The Blender export stage normalizes VMAT paths in SMD triangle material rows to match
 the generated VMT paths under the QC `$cdmaterials "s2_import"` directory. Generated
 VMT/VTF files are staged into the configured CS:S game directory under

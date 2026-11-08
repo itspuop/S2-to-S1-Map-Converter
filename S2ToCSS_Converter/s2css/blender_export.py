@@ -16,7 +16,7 @@ def blender_compatible_dmx_bytes(data: bytes) -> bytes:
     label before parsing, so changing only that label is sufficient. The
     original source file is never modified.
     """
-    nul = data.find(b"\\0")
+    nul = data.find(b"\0")
     if nul < 0:
         raise ValueError("DMX file has no null-terminated header.")
     header = data[:nul]

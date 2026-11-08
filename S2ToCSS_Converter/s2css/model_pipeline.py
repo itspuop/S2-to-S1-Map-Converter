@@ -217,6 +217,24 @@ def compile_qc(
     return {"model_file": str(mdl), "artifacts": copied, "log_tail": log[-4000:]}
 
 
+def resolve_studiomdl_executable(configured: str | Path | None, game_dir: str | Path | None) -> str:
+    """Use the configured compiler, or detect the standard CS:S sibling bin path."""
+    configured_text = str(configured or "").strip()
+    if configured_text and Path(configured_text).is_file():
+        return str(Path(configured_text))
+    if game_dir:
+        game = Path(game_dir)
+        candidates = [
+            game / "bin" / "studiomdl.exe",
+            game.parent / "bin" / "studiomdl.exe",
+            game.parent.parent / "bin" / "studiomdl.exe",
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                return str(candidate)
+    return configured_text
+
+
 def _qc_model_name(qc_path: Path) -> str:
     for line in qc_path.read_text(encoding="utf-8", errors="replace").splitlines():
         if line.strip().lower().startswith("$modelname"):
@@ -237,8 +255,8 @@ def process_model_instances(
     root, out = Path(project_root), Path(output_dir)
     tools = toolchain or {}
     blender = str(tools.get("blender", "")).strip()
-    studiomdl = str(tools.get("studiomdl", "")).strip()
     game_dir = str(tools.get("game_dir", "")).strip()
+    studiomdl = resolve_studiomdl_executable(tools.get("studiomdl", ""), game_dir)
     rows = list(rows)
     usages: dict[str, set[str]] = {}
     for row in rows:

@@ -161,14 +161,22 @@ for `.vmdl` / `.vmdl_c` references and writes:
 - `<map>_model_instances.csv`: spreadsheet-friendly placement list with origin,
   pitch/yaw/roll, scale, source node identity, and an explicit unmapped status.
 
-This is an inventory/handoff stage only. It does not yet create Source 1
-`prop_static` entities or compile MDLs. Transform values and selected entity properties are preserved exactly
-as decoded from the VMAP. The inventory also records the source entity class
-(e.g. `prop_static` / `prop_dynamic`), skin, solidity, render color, shadow
-setting, cubemap setting, and material override when present. Coordinate/angle
-conversion must be validated before these values are emitted into a playable
-VMF. The next stage is to associate these records with manually exported
-Source 1 model assets and then generate VMF entities only for verified mappings.
+The inventory also feeds the optional model-conversion pipeline. When Blender,
+Blender Source Tools, and the CS:S `studiomdl.exe` paths are configured, the
+converter resolves editable DMX/FBX sources, exports SMD/QC files, compiles
+static/dynamic model variants, and emits VMF prop entities only for models that
+compiled successfully. Candidate selection prefers render meshes and LOD0 over
+physics/collision sidecars. For Source 2 `binary_seqids` DMX files, the exporter
+normalizes only the temporary import copy's header; the original asset is left
+untouched. If the toolchain is not configured, the inventory is still written
+and the model manifest records which stages are pending.
+
+Transform values and selected entity properties are preserved exactly as decoded
+from the VMAP. The inventory records the source entity class (e.g. `prop_static`
+/ `prop_dynamic`), skin, solidity, render color, shadow setting, cubemap setting,
+and material override when present. Coordinate/angle conversion is still passed
+through unchanged and must be validated in Hammer before the VMF is treated as a
+playable map.
 
 ### Validation against the supplied surf_the_wave.vmap
 

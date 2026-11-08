@@ -3,8 +3,26 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 import traceback
 from pathlib import Path
+
+
+def blender_compatible_dmx_bytes(data: bytes) -> bytes:
+    """Return a DMX byte stream Blender Source Tools can parse.
+
+    Source 2 binary_seqids v9 has the same payload layout as binary v9; only
+    its element-ID bytes differ. Blender Source Tools rejects the encoding
+    label before parsing, so changing only that label is sufficient. The
+    original source file is never modified.
+    """
+    nul = data.find(b"\\0")
+    if nul < 0:
+        raise ValueError("DMX file has no null-terminated header.")
+    header = data[:nul]
+    if b"dmx encoding binary_seqids 9 format " not in header:
+        return data
+    return header.replace(b"binary_seqids", b"binary", 1) + data[nul:]
 
 
 def normalize_smd_material_paths(smd_path: Path) -> list[dict]:
@@ -73,7 +91,18 @@ def main():
         elif suffix == ".dmx":
             if not hasattr(bpy.ops.import_scene, "smd"):
                 raise RuntimeError("Blender Source Tools DMX importer operator is unavailable.")
-            bpy.ops.import_scene.smd(filepath=str(source))
+            # Blender Source Tools 3.4.3 rejects the binary_seqids encoding
+            # label even though its v9 payload is otherwise binary-compatible.
+            # Import a temporary header-normalized copy; leave addon assets intact.
+            dmx_data = source.read_bytes()
+            compatible_data = blender_compatible_dmx_bytes(dmx_data)
+            if compatible_data is dmx_data:
+                bpy.ops.import_scene.smd(filepath=str(source))
+            else:
+                with tempfile.TemporaryDirectory(prefix="s2css_dmx_") as temp_dir:
+                    compatible_source = Path(temp_dir) / source.name
+                    compatible_source.write_bytes(compatible_data)
+                    bpy.ops.import_scene.smd(filepath=str(compatible_source))
         else:
             raise RuntimeError(f"Unsupported source model extension: {suffix}")
 

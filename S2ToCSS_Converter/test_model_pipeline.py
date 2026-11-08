@@ -11,7 +11,7 @@ from s2css.model_pipeline import (
     write_qc,
 )
 
-from s2css.blender_export import normalize_smd_material_paths
+from s2css.blender_export import blender_compatible_dmx_bytes, normalize_smd_material_paths
 
 
 class ModelPipelineTests(unittest.TestCase):
@@ -85,6 +85,18 @@ class ModelPipelineTests(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertEqual(extract_smd_material_names(smd), ["models/coral"])
+
+    def test_normalizes_binary_seqids_header_without_changing_payload(self):
+        payload = b"\\x01\\x02\\x03\\x04\\x00binary-data"
+        source = b"<!-- dmx encoding binary_seqids 9 format model 22 -->\\n\\x00" + payload
+        normalized = blender_compatible_dmx_bytes(source)
+        self.assertIn(b"dmx encoding binary 9 format model 22", normalized)
+        self.assertTrue(normalized.endswith(payload))
+        self.assertEqual(source.split(b"\\x00", 1)[1], payload)
+
+    def test_leaves_regular_binary_dmx_unchanged(self):
+        source = b"<!-- dmx encoding binary 9 format model 22 -->\\n\\x00payload"
+        self.assertIs(blender_compatible_dmx_bytes(source), source)
 
     def test_normalizes_vmat_paths_in_smd_triangle_materials(self):
         with TemporaryDirectory() as tmp:

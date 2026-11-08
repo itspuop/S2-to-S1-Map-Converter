@@ -39,6 +39,19 @@ class ModelPipelineTests(unittest.TestCase):
             self.assertEqual(chosen, lod0)
             self.assertEqual(len(matches), 2)
 
+    def test_prefers_render_body_over_physics_dmx_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            folder = root / "models/props"
+            folder.mkdir(parents=True)
+            physics = folder / "crate_physics.dmx"
+            body = folder / "crate_body_lod0.fbx"
+            physics.write_bytes(b"physics")
+            body.write_bytes(b"body")
+            chosen, matches = find_model_source(root, "models/props/crate.vmdl")
+            self.assertEqual(chosen, body)
+            self.assertEqual(len(matches), 2)
+
     def test_finds_by_stem_when_source_tree_layout_differs(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

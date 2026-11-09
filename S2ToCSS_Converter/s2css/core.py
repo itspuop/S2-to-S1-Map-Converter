@@ -447,8 +447,8 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                         ]
                         if skipped_meshes:
                             report.warnings.append(
-                                f'{len(skipped_meshes)} CMapMesh node(s) were skipped because they were '
-                                'too complex, ambiguous, open, non-planar, non-manifold, or non-convex. '
+                                f'{len(skipped_meshes)} CMapMesh node(s) were not exported as VMF brushes because they were '
+                                'too complex, ambiguous, open, non-planar, non-manifold, or non-convex; eligible meshes are sent through the model pipeline. '
                                 f'First reason: {skipped_meshes[0].get("reason", "see mesh report")}'
                             )
                         progress(
@@ -463,6 +463,9 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                         report.counts['complex_mesh_model_candidates'] = geometry_result.get('model_candidate_count', 0)
                         report.counts['complex_mesh_models_compiled'] = sum(
                             1 for item in mesh_model_result.get('models', []) if item.get('status') == 'compiled'
+                        )
+                        report.counts['complex_mesh_models_failed'] = sum(
+                            1 for item in mesh_model_result.get('models', []) if item.get('status') == 'failed'
                         )
                         report.counts['complex_mesh_model_manifest'] = str(mesh_model_manifest)
                         report.warnings.extend(mesh_model_result.get('warnings', []))

@@ -351,6 +351,72 @@ def process_model_instances(
     return result
 
 
+
+def process_geometry_mesh_models(
+    mesh_report: dict,
+    output_dir: str | Path,
+    toolchain: dict | None = None,
+    progress: Callable[[str], None] | None = None,
+) -> dict:
+    """Turn failed brush candidates into compiled static props using Blender-generated SMD."""
+    out = Path(output_dir)
+    tools = toolchain or {}
+    blender = str(tools.get("blender", "")).strip()
+    game_dir = str(tools.get("game_dir", "")).strip()
+    studiomdl = resolve_studiomdl_executable(tools.get("studiomdl", ""), game_dir)
+    source_root = out / "models" / "s2_import"
+    source_root.mkdir(parents=True, exist_ok=True)
+    result = {"models": [], "compiled_models": {}, "prop_entities": [], "warnings": [], "errors": []}
+    for index, mesh in enumerate(mesh_report.get("meshes", []), 1):
+        source_text = mesh.get("model_source_json")
+        if mesh.get("status") != "model_candidate" or not source_text:
+            continue
+        source = Path(source_text)
+        name = safe_name(mesh.get("model_name") or source.stem)
+        record = {"source_mesh_element": mesh.get("cmapmesh_element_index"),
+                  "source_file": str(source), "model_name": name, "status": "candidate"}
+        if not source.is_file():
+            record["status"] = "source_missing"
+            result["warnings"].append("Geometry package missing for mesh " + name)
+            result["models"].append(record)
+            continue
+        if not blender:
+            record["status"] = "awaiting_blender_path"
+            result["warnings"].append("Complex mesh " + name + " is ready for Blender, but Blender is not configured.")
+            result["models"].append(record)
+            continue
+        if progress:
+            progress("Blender model conversion [" + str(index) + "]: " + name)
+        try:
+            smd, export_info = export_smd_with_blender(blender, source, source_root, name)
+            record["smd_file"] = str(smd)
+            record["blender"] = export_info
+            qc = write_qc(source_root / (name + "_static.qc"), name + "_static", smd.name,
+                          static_prop=True, collision=True)
+            record["qc_file"] = str(qc)
+            if not studiomdl or not game_dir:
+                record["status"] = "smd_exported"
+                result["warnings"].append("Complex mesh " + name + " exported to SMD/QC, but studiomdl or CS:S game directory is not configured.")
+            else:
+                compiled = compile_qc(studiomdl, game_dir, qc, out)
+                record["compiled"] = compiled
+                record["status"] = "compiled"
+                synthetic_ref = "__geometry_mesh__/" + name
+                result["compiled_models"][synthetic_ref] = {"static": "models/s2_import/" + name + "_static.mdl"}
+                result["prop_entities"].append({
+                    "source_model": synthetic_ref, "source_entity_class": "prop_static",
+                    "origin": [0, 0, 0], "angles": [0, 0, 0], "scales": [1, 1, 1],
+                    "element_index": mesh.get("cmapmesh_element_index"),
+                    "targetname": mesh.get("name") or "",
+                })
+        except Exception as exc:
+            record["status"] = "failed"
+            record["error"] = str(exc)
+            result["errors"].append("Complex mesh " + name + ": " + str(exc))
+        result["models"].append(record)
+    return result
+
+
 def build_prop_entities(rows: Iterable[dict], compiled_models: dict, warnings: list[str] | None = None) -> list[dict]:
     """Create VMF prop entities only for compiled models and usable placement records.
 

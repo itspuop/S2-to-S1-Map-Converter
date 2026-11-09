@@ -398,7 +398,21 @@ def process_geometry_mesh_models(
                 record["status"] = "smd_exported"
                 result["warnings"].append("Complex mesh " + name + " exported to SMD/QC, but studiomdl or CS:S game directory is not configured.")
             else:
-                compiled = compile_qc(studiomdl, game_dir, qc, out)
+                try:
+                    compiled = compile_qc(studiomdl, game_dir, qc, out)
+                    record["collision"] = "concave"
+                except Exception as collision_error:
+                    # Open/non-manifold meshes may still be useful visual props.
+                    # Retry without a collision model rather than losing the render mesh.
+                    qc = write_qc(source_root / (name + "_static.qc"), name + "_static",
+                                  smd.name, static_prop=True, collision=False)
+                    compiled = compile_qc(studiomdl, game_dir, qc, out)
+                    record["collision"] = "omitted_after_compile_failure"
+                    record["collision_warning"] = str(collision_error)
+                    result["warnings"].append(
+                        "Compiled visual-only model " + name +
+                        "; concave collision compilation failed and no collision mesh was included."
+                    )
                 record["compiled"] = compiled
                 record["status"] = "compiled"
                 synthetic_ref = "__geometry_mesh__/" + name

@@ -14,6 +14,7 @@ from .model_pipeline import process_model_instances, build_prop_entities, extrac
 from .vmap_export import export_vmap_to_vmf
 from .materials import convert_vmat_references, scan_dmx_material_references, collect_vmat_references, stage_materials_to_game
 from .entity_conversion import build_entity_conversion, append_entity_blocks, append_worldspawn_properties
+from .entity_substitutions import load_entity_substitutions
 
 @dataclass
 class Report:
@@ -590,10 +591,14 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                                 'entity_properties_class':row.get('entity_properties_class')})
                     report.counts.setdefault('transform_csv_outputs',[]).append(str(csv_path))
                     # Convert non-model Hammer entities and any structured output connections.
-                    entity_result = build_entity_conversion(inv.get('dmx_transform_records', []))
+                    entity_substitution_map = load_entity_substitutions(project_root_for_map(p))
+                    entity_result = build_entity_conversion(inv.get('dmx_transform_records', []), entity_substitution_map)
                     entity_json = output_dir / (p.stem + '_entity_conversion.json')
                     entity_json.write_text(json.dumps(entity_result, indent=2), encoding='utf-8')
                     report.counts['entities_converted'] = entity_result.get('entity_count', 0)
+                    substitution_summary = entity_result.get('entity_substitutions', {})
+                    report.counts['entity_substitutions'] = substitution_summary.get('count', 0)
+                    report.counts['entity_substitution_details'] = substitution_summary.get('by_mapping', {})
                     report.counts['entity_io_connections'] = entity_result.get('connection_count', 0)
                     report.counts['model_prop_io_connections'] = entity_result.get('model_prop_connection_count', 0)
                     report.counts['entities_skipped'] = len(entity_result.get('skipped_entities', []))
@@ -606,6 +611,10 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                     if entity_result.get('unsupported_properties'):
                         report.warnings.append(
                             f"{len(entity_result['unsupported_properties'])} Source 2-prefixed entity property value(s) were not mapped; see {entity_json.name}."
+                        )
+                    if substitution_summary.get('diagnostics'):
+                        report.warnings.append(
+                            f"Applied {substitution_summary.get('count', 0)} Source 2-to-Source 1 entity class substitution(s); verify the resulting entities in Hammer."
                         )
                     report.counts['entity_conversion_report'] = str(entity_json)
                     if entity_result.get('skipped_entities'):

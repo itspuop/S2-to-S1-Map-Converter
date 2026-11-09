@@ -406,7 +406,7 @@ def _scan_source2_materials(
     )
     return report
 
-def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | None = None, materials_root: Path | None = None, material_map_path: Path | None = None) -> dict:
+def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | None = None, materials_root: Path | None = None, material_map_path: Path | None = None, model_export_dir: Path | None = None) -> dict:
     started = time.monotonic()
     print(f"[1/3] Parsing editable VMAP: {vmap_path}", flush=True)
     graph = parse_binary_v9(vmap_path, include_binary=False)
@@ -444,6 +444,8 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
         print("No CMapMesh nodes were found; writing an empty world VMF.", flush=True)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    model_export_dir = Path(model_export_dir) if model_export_dir else output_path.parent / (output_path.stem + '_mesh_models')
+    model_export_dir.mkdir(parents=True, exist_ok=True)
     # Write the header up front, then append solids as each mesh completes.
     with output_path.open("w", encoding="utf-8", newline="\n") as vmf:
         vmf.write(_vmf_header())
@@ -470,8 +472,8 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
             # Announce the current mesh before decoding, so a single expensive mesh is visible.
             print(f"  Processing mesh {ordinal:,}/{total:,} (element {index}, edges {edge_count:,}, faces {face_count:,})...", flush=True)
             try:
-                if edge_count > MAX_EDGES or face_count > MAX_FACES:
-                    item.update({"status": "manual_or_unsupported", "reason": f"Mesh exceeds safe brush-export limit ({edge_count} edges / {face_count} faces; limits {MAX_EDGES} / {MAX_FACES}). Convert this complex mesh to a model in Hammer."})
+                if edge_count > 100000 or face_count > 30000:
+                    item.update({"status": "manual_or_unsupported", "reason": f"Mesh exceeds safe decode limit ({edge_count} edges / {face_count} faces)."})
                     skipped += 1
                     decoded = None
                 else:
@@ -513,8 +515,10 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
                         item["transformed_positions"] = vertices
                 if decoded is None:
                     validation = None
+                elif edge_count > MAX_EDGES or face_count > MAX_FACES:
+                    validation = {"valid": False, "issues": [f"Mesh exceeds safe brush-export limit ({edge_count} edges / {face_count} faces)."]}
                 elif len(vertices) * len(faces) > MAX_VERTEX_FACE_PRODUCT:
-                    validation = {"valid": False, "issues": [f"Validation complexity limit exceeded ({len(vertices)} vertices x {len(faces)} faces); convert this complex mesh to a model in Hammer."]}
+                    validation = {"valid": False, "issues": [f"Validation complexity limit exceeded ({len(vertices)} vertices x {len(faces)} faces)."]}
                 else:
                     validation = validate_convex_brush(vertices, faces)
                     # Index-based topology checks can miss duplicate faces when different
@@ -543,8 +547,20 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
                 if decoded is None:
                     pass  # Preflight already marked this oversized mesh as skipped.
                 elif not validation["valid"]:
-                    item.update({"status": "manual_or_unsupported", "reason": "; ".join(validation["issues"])})
+                    item.update({"status": "model_candidate", "reason": "; ".join(validation["issues"])})
                     skipped += 1
+                    mesh_key = "mesh_" + str(index) + "_" + str(node.get("guid") or "noguid")[:8]
+                    mesh_json = model_export_dir / (mesh_key + ".json")
+                    mesh_payload = {
+                        "name": mesh_key, "source_element_index": index,
+                        "vertices": vertices, "faces": faces,
+                        "materials": [entry.get("source1_material", "TOOLS/TOOLSNODRAW") for entry in face_material_assignments],
+                        "source_transform_baked": True,
+                        "source_origin": origin, "source_angles": angles, "source_scales": scales,
+                    }
+                    mesh_json.write_text(json.dumps(mesh_payload), encoding="utf-8")
+                    item["model_source_json"] = str(mesh_json)
+                    item["model_name"] = mesh_key
                 else:
                     center = tuple(sum(v[k] for v in vertices) / len(vertices) for k in range(3))
                     item["vmf_solid_id"] = next_id

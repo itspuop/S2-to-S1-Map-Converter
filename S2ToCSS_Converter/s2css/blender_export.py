@@ -86,7 +86,31 @@ def main():
             )
 
         suffix = source.suffix.lower()
-        if suffix == ".fbx":
+        if suffix == ".json":
+            # Native mesh package emitted by vmap_export.py. Geometry coordinates
+            # already include the Source 2 instance transform, so the resulting
+            # prop entity is placed at world origin with identity angles.
+            payload = json.loads(source.read_text(encoding="utf-8"))
+            vertices = payload.get("vertices", [])
+            faces = payload.get("faces", [])
+            material_names = payload.get("materials", [])
+            if not vertices or not faces:
+                raise RuntimeError("Mesh package contains no vertices or faces.")
+            mesh = bpy.data.meshes.new(object_name)
+            mesh.from_pydata(vertices, [], faces)
+            mesh.update()
+            obj = bpy.data.objects.new(object_name, mesh)
+            bpy.context.collection.objects.link(obj)
+            for material_name in sorted(set(str(value) for value in material_names)):
+                material = bpy.data.materials.new(name=material_name)
+                obj.data.materials.append(material)
+            material_slots = {material.name: index for index, material in enumerate(obj.data.materials)}
+            for polygon_index, polygon in enumerate(mesh.polygons):
+                if polygon_index < len(material_names):
+                    polygon.material_index = material_slots.get(str(material_names[polygon_index]), 0)
+            bpy.context.view_layer.objects.active = obj
+            obj.select_set(True)
+        elif suffix == ".fbx":
             bpy.ops.import_scene.fbx(filepath=str(source))
         elif suffix == ".dmx":
             if not hasattr(bpy.ops.import_scene, "smd"):

@@ -5,6 +5,25 @@ from tempfile import TemporaryDirectory
 from s2css.entity_conversion import build_entity_conversion, append_entity_blocks, append_worldspawn_properties
 
 class EntityConversionTests(unittest.TestCase):
+    def test_substitutes_source2_omni_and_spot_lights(self):
+        records = [
+            {"index": 31, "class": "CMapEntity", "origin": [1, 2, 3],
+             "entity_properties": {"classname": "light_omni2", "targetname": "omni_a", "_light": "255 200 150 300"}},
+            {"index": 32, "class": "CMapEntity", "origin": [4, 5, 6],
+             "entity_properties": {"classname": "light_spot2", "targetname": "spot_a"}},
+        ]
+        result = build_entity_conversion(records)
+        self.assertEqual([item["classname"] for item in result["entities"]], ["light", "light_spot"])
+        self.assertEqual(result["entity_substitutions"]["count"], 2)
+        self.assertIn("light_omni2 -> light", result["entity_substitutions"]["by_mapping"])
+        self.assertIn("light_spot2 -> light_spot", result["entity_substitutions"]["by_mapping"])
+
+    def test_project_substitution_override_is_supported(self):
+        records = [{"index": 33, "class": "CMapEntity",
+                    "entity_properties": {"classname": "light_omni2", "targetname": "omni_override"}}]
+        result = build_entity_conversion(records, {"light_omni2": "light_spot"})
+        self.assertEqual(result["entities"][0]["classname"], "light_spot")
+
     def test_converts_logic_entity_and_structured_output(self):
         records = [{
             "index": 12, "class": "CMapEntity", "origin": [1, 2, 3], "angles": [0, 90, 0],

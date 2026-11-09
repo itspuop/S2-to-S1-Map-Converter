@@ -14,7 +14,6 @@ from typing import Any
 DEFAULT_SUBSTITUTIONS = {
     "light_omni2": "light",
     "light_spot2": "light_spot",
-    "light_ortho": "light",
     "light_environment2": "light_environment",
 }
 

@@ -421,7 +421,7 @@ def process_geometry_mesh_models(
                     "source_model": synthetic_ref, "source_entity_class": "prop_static",
                     "origin": [0, 0, 0], "angles": [0, 0, 0], "scales": [1, 1, 1],
                     "element_index": mesh.get("cmapmesh_element_index"),
-                    "targetname": mesh.get("name") or "",
+                    "targetname": "s2_mesh_" + str(mesh.get("cmapmesh_element_index")),
                 })
         except Exception as exc:
             record["status"] = "failed"

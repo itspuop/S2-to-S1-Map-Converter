@@ -144,6 +144,16 @@ def main():
         active = bpy.context.view_layer.objects.active
         active.name = object_name
         active.data.name = object_name
+        active.data.validate(clean_customdata=True)
+        active.data.update()
+        if not active.data.uv_layers:
+            # Imported mesh packages do not contain Source 2 UV layers in this
+            # intermediate representation. Generate a fallback atlas so VMTs
+            # have usable texture coordinates rather than a zeroed UV channel.
+            bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.mesh.select_all(action="SELECT")
+            bpy.ops.uv.smart_project(island_margin=0.02)
+            bpy.ops.object.mode_set(mode="OBJECT")
 
         scene = bpy.context.scene
         scene.vs.export_format = "SMD"

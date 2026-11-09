@@ -10,7 +10,7 @@ from pathlib import Path
 from dataclasses import dataclass, asdict
 from .dmx_binary import parse_binary_v9, summarize_graph, extract_transform_records, DMXError
 from .model_inventory import build_model_instance_inventory, write_model_instance_inventory
-from .model_pipeline import process_model_instances, build_prop_entities, extract_smd_material_names
+from .model_pipeline import process_model_instances, process_geometry_mesh_models, build_prop_entities, extract_smd_material_names
 from .vmap_export import export_vmap_to_vmf
 from .materials import convert_vmat_references, scan_dmx_material_references, collect_vmat_references, stage_materials_to_game
 from .entity_conversion import build_entity_conversion, append_entity_blocks, append_worldspawn_properties
@@ -357,7 +357,8 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                                              if toolchain and toolchain.get('material_map') else None)
                         progress('Decoding CMapMesh topology and exporting validated convex VMF brushes…')
                         geometry_result = export_vmap_to_vmf(
-                            p, geometry_vmf, geometry_report, materials_root, material_map_path
+                            p, geometry_vmf, geometry_report, materials_root, material_map_path,
+                            output_dir / (p.stem + '_mesh_models')
                         )
                         geometry_success = True
                         report.counts.setdefault('vmf_outputs', []).append(str(geometry_vmf))
@@ -425,7 +426,8 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                                 generated_map = output_dir / (p.stem + '_generated_material_map.json')
                                 generated_map.write_text(json.dumps({'material_map': material_map}, indent=2), encoding='utf-8')
                                 geometry_result = export_vmap_to_vmf(
-                                    p, geometry_vmf, geometry_report, materials_root, generated_map
+                                    p, geometry_vmf, geometry_report, materials_root, generated_map,
+                                    output_dir / (p.stem + '_mesh_models')
                                 )
                                 generated_map.unlink(missing_ok=True)
                             if toolchain and toolchain.get('game_dir'):
@@ -441,7 +443,7 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                         report.counts.setdefault('mesh_reports', []).append(str(geometry_report))
                         skipped_meshes = [
                             item for item in geometry_result.get('meshes', [])
-                            if item.get('status') == 'manual_or_unsupported'
+                            if item.get('status') in {'manual_or_unsupported', 'model_candidate'}
                         ]
                         if skipped_meshes:
                             report.warnings.append(
@@ -453,6 +455,26 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                             f'Brush export complete: {geometry_result.get("exported_brush_count", 0)} '
                             f'exported, {geometry_result.get("skipped_mesh_count", 0)} skipped.'
                         )
+                        mesh_model_result = process_geometry_mesh_models(
+                            geometry_result, output_dir, toolchain=toolchain or {}, progress=progress
+                        )
+                        mesh_model_manifest = output_dir / (p.stem + '_mesh_model_pipeline_manifest.json')
+                        mesh_model_manifest.write_text(json.dumps(mesh_model_result, indent=2), encoding='utf-8')
+                        report.counts['complex_mesh_model_candidates'] = geometry_result.get('model_candidate_count', 0)
+                        report.counts['complex_mesh_models_compiled'] = sum(
+                            1 for item in mesh_model_result.get('models', []) if item.get('status') == 'compiled'
+                        )
+                        report.counts['complex_mesh_model_manifest'] = str(mesh_model_manifest)
+                        report.warnings.extend(mesh_model_result.get('warnings', []))
+                        report.errors.extend(mesh_model_result.get('errors', []))
+                        mesh_prop_entities = build_prop_entities(
+                            mesh_model_result.get('prop_entities', []),
+                            mesh_model_result.get('compiled_models', {}), report.warnings
+                        )
+                        if mesh_prop_entities and geometry_vmf.is_file():
+                            appended_mesh_props = append_entity_blocks(geometry_vmf, mesh_prop_entities)
+                            report.counts['complex_mesh_prop_entities'] = appended_mesh_props
+                            progress(f'Added {appended_mesh_props} automatically compiled complex-mesh prop(s) to the VMF.')
                     except Exception as mesh_error:
                         report.errors.append(f'{p.name}: native CMapMesh VMF export failed: {mesh_error}')
                 if inv.get('dmx_parsed'):

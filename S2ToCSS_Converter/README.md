@@ -264,7 +264,7 @@ The automated tests use synthetic mesh fixtures. Real-map coverage is based on t
 
 The VMAP entity converter includes a conservative Source 2-to-Source 1 class substitution table.
 Current defaults include `light_omni2 -> light`, `light_spot2 -> light_spot`,
-`light_ortho -> light`, and `light_environment2 -> light_environment`.
+and `light_environment2 -> light_environment`.
 
 For project-specific overrides, copy `entity_substitutions.json` from the converter folder
 into the selected addon/project root and edit its `substitutions` object. Source 1 class

@@ -1,0 +1,9 @@
+{
+  "_comment": "Optional project-local Source 2 to Source 1 entity class substitutions. These values override built-in defaults.",
+  "substitutions": {
+    "light_omni2": "light",
+    "light_spot2": "light_spot",
+    "light_ortho": "light",
+    "light_environment2": "light_environment"
+  }
+}

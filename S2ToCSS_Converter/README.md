@@ -280,10 +280,9 @@ Meshes that cannot safely become convex VMF brushes are now exported as intermed
 geometry packages and can be converted directly by the configured Blender + Blender Source
 Tools + CS:S `studiomdl` pipeline. Blender constructs the mesh from decoded VMAP vertices,
 faces and per-face material slots, generates fallback UVs when no UV layer is present, exports
-SMD/QC, and compiles a static prop. The original Source 2 instance transform is baked into the
-mesh coordinates; the generated VMF prop is therefore placed at world origin with identity
-angles. This preserves the mesh's world-space placement but means its model pivot is at map
-origin rather than its original local origin.
+SMD/QC, and compiles a static prop. The original Source 2 instance transform is baked into the mesh coordinates, then the mesh is
+re-centered around its bounds centroid. The generated VMF prop is placed at that centroid with
+identity angles, preserving its world-space placement while providing a useful local model pivot.
 
 The converter first attempts a concave collision model. If that collision compile fails, it
 retries as a visual-only static prop and records the missing collision in the mesh model

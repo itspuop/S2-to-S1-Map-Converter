@@ -258,3 +258,17 @@ py test_smoke.py
 ```
 
 The automated tests use synthetic mesh fixtures. Real-map coverage is based on the previously inspected `surf_the_wave.vmap` for DMX/model inventory; the newly integrated geometry exporter and headless Blender pipeline still need a fresh end-to-end run on your Windows setup.
+
+
+## Entity substitutions
+
+The VMAP entity converter includes a conservative Source 2-to-Source 1 class substitution table.
+Current defaults include `light_omni2 -> light`, `light_spot2 -> light_spot`,
+`light_ortho -> light`, and `light_environment2 -> light_environment`.
+
+For project-specific overrides, copy `entity_substitutions.json` from the converter folder
+into the selected addon/project root and edit its `substitutions` object. Source 1 class
+replacements are validated against the converter's conservative class allowlist. The conversion
+report records each substitution. Light color/brightness and spotlight cone values are translated
+where possible, but Source 2 intensity units, falloff, range behavior, and runtime lighting are not
+identical to Source 1; inspect converted lights in Hammer and expect approximation warnings.

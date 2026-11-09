@@ -419,7 +419,7 @@ def process_geometry_mesh_models(
                 result["compiled_models"][synthetic_ref] = {"static": "models/s2_import/" + name + "_static.mdl"}
                 result["prop_entities"].append({
                     "source_model": synthetic_ref, "source_entity_class": "prop_static",
-                    "origin": [0, 0, 0], "angles": [0, 0, 0], "scales": [1, 1, 1],
+                    "origin": mesh.get("model_origin") or [0, 0, 0], "angles": [0, 0, 0], "scales": [1, 1, 1],
                     "element_index": mesh.get("cmapmesh_element_index"),
                     "targetname": "s2_mesh_" + str(mesh.get("cmapmesh_element_index")),
                 })

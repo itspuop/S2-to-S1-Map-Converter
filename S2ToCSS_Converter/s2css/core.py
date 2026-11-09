@@ -472,6 +472,8 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                             mesh_model_result.get('compiled_models', {}), report.warnings
                         )
                         if mesh_prop_entities and geometry_vmf.is_file():
+                            for mesh_prop_index, mesh_prop in enumerate(mesh_prop_entities):
+                                mesh_prop['id'] = str(3000000 + mesh_prop_index)
                             appended_mesh_props = append_entity_blocks(geometry_vmf, mesh_prop_entities)
                             report.counts['complex_mesh_prop_entities'] = appended_mesh_props
                             progress(f'Added {appended_mesh_props} automatically compiled complex-mesh prop(s) to the VMF.')

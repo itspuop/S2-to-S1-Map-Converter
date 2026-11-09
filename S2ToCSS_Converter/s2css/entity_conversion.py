@@ -15,6 +15,8 @@ _ALIASES = {
     "m_disableshadows": "disableshadows", "m_rendertocubemaps": "rendertocubemaps",
     "m_materialoverride": "materialoverride", "m_solid": "solid", "m_skin": "skin",
     "m_skyname": "skyname", "m_detailmaterial": "detailmaterial",
+    "m_color": "color", "m_brightness": "brightness", "m_intensity": "intensity",
+    "m_range": "range", "m_outercone": "outer_cone", "m_innercone": "inner_cone",
     "m_detailvbsp": "detailvbsp", "m_maxpropscreenwidth": "maxpropscreenwidth",
 }
 _SKIP = {"classname", "m_editoronly", "editoronly", "m_editorclass", "m_classname",
@@ -109,6 +111,51 @@ def _connection_fields(record: dict) -> dict | None:
             "parameter": _scalar(parameter) or "", "delay": _scalar(delay) or "0",
             "times": _scalar(times) or "-1"}
 
+
+def _source1_light_keyvalues(source_class: str, props: dict) -> tuple[dict, list[str]]:
+    """Approximate Source 2 light color/intensity/cone fields as Source 1 keyvalues."""
+    lowered = {str(key).lower().removeprefix("m_"): value for key, value in props.items()}
+    converted, notes = {}, []
+    if "_light" not in lowered and "light" not in lowered:
+        color = lowered.get("color")
+        brightness = lowered.get("brightness", lowered.get("intensity"))
+        channels = None
+        if isinstance(color, str):
+            try:
+                channels = [float(part) for part in color.replace(",", " ").split()[:3]]
+            except ValueError:
+                channels = None
+        elif isinstance(color, (list, tuple)) and len(color) >= 3:
+            try:
+                channels = [float(value) for value in color[:3]]
+            except (TypeError, ValueError):
+                channels = None
+        if channels is not None and brightness is not None:
+            try:
+                intensity = float(brightness)
+                if all(0.0 <= value <= 1.0 for value in channels):
+                    channels = [value * 255.0 for value in channels]
+                converted["_light"] = " ".join(
+                    [*(f"{value:.6g}" for value in channels), f"{intensity:.6g}"]
+                )
+                notes.append("Source 2 light color/brightness packed into Source 1 _light; intensity units are approximate.")
+            except (TypeError, ValueError):
+                notes.append("Could not convert Source 2 light color/brightness; inspect the light manually.")
+    if source_class == "light_spot2":
+        for source_key, target_key in (("outer_cone", "_cone"), ("inner_cone", "_inner_cone")):
+            value = lowered.get(source_key)
+            scalar = _scalar(value)
+            if scalar is not None:
+                converted[target_key] = scalar
+        if "outer_cone" in lowered or "inner_cone" in lowered:
+            notes.append("Spotlight cone angles were transferred; verify cone orientation and units in Hammer.")
+    if lowered.get("range") is not None:
+        scalar = _scalar(lowered["range"])
+        if scalar is not None:
+            converted["_zero_percent_distance"] = scalar
+            notes.append("Source 2 light range mapped to Source 1 _zero_percent_distance as an approximation.")
+    return converted, notes
+
 def _find_model_value(props: dict) -> bool:
     return any(str(k).lower() in {"model", "m_model"} and isinstance(v, str) and ".vmdl" in v.lower()
                for k, v in props.items())
@@ -116,6 +163,7 @@ def _find_model_value(props: dict) -> bool:
 def build_entity_conversion(records: list[dict], substitutions: dict[str, str] | None = None) -> dict:
     entities, skipped, unsupported_properties, model_prop_connections = [], [], [], []
     substitution_diagnostics = []
+    light_conversion_notes = []
     worldspawn_properties = {}
     known_targets = set()
     for record in records:
@@ -179,6 +227,10 @@ def build_entity_conversion(records: list[dict], substitutions: dict[str, str] |
                             "reason": "Source 2 model-backed non-prop entity requires a dedicated brush/model conversion."})
             continue
         keys = {"id": str(2000000 + int(record.get("index") or 0)), "classname": classname}
+        if source_classname in {"light_omni2", "light_spot2", "light_ortho", "light_environment2"}:
+            light_values, light_notes = _source1_light_keyvalues(source_classname, props)
+            keys.update(light_values)
+            light_conversion_notes.extend({"element_index": record.get("index"), "classname": source_classname, "note": note} for note in light_notes)
         if record.get("origin") is not None: keys["origin"] = _scalar(record["origin"]) or ""
         if record.get("angles") is not None: keys["angles"] = _scalar(record["angles"]) or ""
         for key, value in props.items():
@@ -198,6 +250,8 @@ def build_entity_conversion(records: list[dict], substitutions: dict[str, str] |
                 if not material_path.lower().startswith("s2_import/"):
                     material_path = "s2_import/" + material_path
                 scalar = material_path
+            if str(key).lower() in {"color", "m_color", "brightness", "m_brightness", "intensity", "m_intensity", "range", "m_range", "outer_cone", "m_outercone", "inner_cone", "m_innercone"} and source_classname in {"light_omni2", "light_spot2", "light_ortho", "light_environment2"}:
+                continue
             if str(key).lower().startswith("m_") and str(key).lower() not in _ALIASES:
                 unsupported_properties.append({"element_index": record.get("index"), "classname": classname, "property": str(key), "value": scalar})
                 continue
@@ -229,6 +283,7 @@ def build_entity_conversion(records: list[dict], substitutions: dict[str, str] |
             "known_targetname_count": len(known_targets),
             "entity_count": len(entities),
             "entity_substitutions": summarize_substitutions(substitution_diagnostics),
+            "light_conversion_notes": light_conversion_notes,
             "connection_count": sum(len(e.get("__connections__", [])) for e in entities) + sum(len(item.get("connections", [])) for item in model_prop_connections)}
 
 def append_worldspawn_properties(vmf_path, properties: dict) -> int:

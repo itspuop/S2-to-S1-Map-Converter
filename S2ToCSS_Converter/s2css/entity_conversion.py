@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from typing import Any
+from .entity_substitutions import substitute_entity_class, summarize_substitutions
 
 _ALIASES = {
     "m_targetname": "targetname", "m_name": "targetname",
@@ -23,7 +24,7 @@ _ALLOWED_PREFIXES = ("logic_", "trigger_", "func_", "info_", "point_", "env_",
                      "filter_", "path_", "move_", "game_", "npc_", "weapon_", "light_", "prop_")
 _ALLOWED_EXACT = {"light", "ambient_generic", "prop_detail",
                   "prop_static", "prop_dynamic", "prop_dynamic_override",
-                  "prop_physics", "prop_physics_override", "prop_physics_multiplayer"}
+                  "prop_physics", "prop_physics_override", "prop_physics_multiplayer", "light_environment", "light_dynamic"}
 
 def _scalar(value: Any) -> str | None:
     if isinstance(value, bool): return "1" if value else "0"
@@ -114,6 +115,7 @@ def _find_model_value(props: dict) -> bool:
 
 def build_entity_conversion(records: list[dict]) -> dict:
     entities, skipped, unsupported_properties, model_prop_connections = [], [], [], []
+    substitution_diagnostics = []
     worldspawn_properties = {}
     known_targets = set()
     for record in records:
@@ -139,6 +141,14 @@ def build_entity_conversion(records: list[dict]) -> dict:
         raw_class = lowered_props.get("classname", lowered_props.get("m_classname", ""))
         classname = str(raw_class).strip().lower()
         if not classname: continue
+        source_classname = classname
+        classname, substitution = substitute_entity_class(classname, props)
+        if substitution:
+            substitution_diagnostics.append({"element_index": record.get("index"), **substitution})
+        if substitution and substitution.get("status") == "rejected":
+            skipped.append({"element_index": record.get("index"), "classname": source_classname,
+                            "reason": substitution.get("reason", "Entity substitution rejected.")})
+            continue
         if classname == "worldspawn":
             for key, value in props.items():
                 normalized = _norm_key(str(key))
@@ -218,6 +228,7 @@ def build_entity_conversion(records: list[dict]) -> dict:
             "model_prop_connection_count": sum(len(item.get("connections", [])) for item in model_prop_connections),
             "known_targetname_count": len(known_targets),
             "entity_count": len(entities),
+            "entity_substitutions": summarize_substitutions(substitution_diagnostics),
             "connection_count": sum(len(e.get("__connections__", [])) for e in entities) + sum(len(item.get("connections", [])) for item in model_prop_connections)}
 
 def append_worldspawn_properties(vmf_path, properties: dict) -> int:

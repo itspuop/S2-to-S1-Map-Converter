@@ -272,3 +272,26 @@ replacements are validated against the converter's conservative class allowlist.
 report records each substitution. Light color/brightness and spotlight cone values are translated
 where possible, but Source 2 intensity units, falloff, range behavior, and runtime lighting are not
 identical to Source 1; inspect converted lights in Hammer and expect approximation warnings.
+
+
+## Automatic complex-mesh conversion
+
+Meshes that cannot safely become convex VMF brushes are now exported as intermediate JSON
+geometry packages and can be converted directly by the configured Blender + Blender Source
+Tools + CS:S `studiomdl` pipeline. Blender constructs the mesh from decoded VMAP vertices,
+faces and per-face material slots, generates fallback UVs when no UV layer is present, exports
+SMD/QC, and compiles a static prop. The original Source 2 instance transform is baked into the
+mesh coordinates; the generated VMF prop is therefore placed at world origin with identity
+angles. This preserves the mesh's world-space placement but means its model pivot is at map
+origin rather than its original local origin.
+
+The converter first attempts a concave collision model. If that collision compile fails, it
+retries as a visual-only static prop and records the missing collision in the mesh model
+manifest. Meshes exceeding the hard decode safety limits remain in the report without model
+conversion. This pipeline requires configured Blender, Blender Source Tools, CS:S game
+directory, and `studiomdl.exe`; without these it still writes the intermediate geometry
+packages and reports the pending conversion.
+
+This is an initial automated recovery path, not a guarantee that every arbitrary/open/non-manifold
+mesh will produce valid collision or render correctly. Review the generated model manifest and
+inspect the VMF in Hammer before compiling the map.

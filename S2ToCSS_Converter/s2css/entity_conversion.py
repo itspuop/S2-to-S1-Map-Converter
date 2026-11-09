@@ -113,7 +113,7 @@ def _find_model_value(props: dict) -> bool:
     return any(str(k).lower() in {"model", "m_model"} and isinstance(v, str) and ".vmdl" in v.lower()
                for k, v in props.items())
 
-def build_entity_conversion(records: list[dict]) -> dict:
+def build_entity_conversion(records: list[dict], substitutions: dict[str, str] | None = None) -> dict:
     entities, skipped, unsupported_properties, model_prop_connections = [], [], [], []
     substitution_diagnostics = []
     worldspawn_properties = {}
@@ -142,7 +142,7 @@ def build_entity_conversion(records: list[dict]) -> dict:
         classname = str(raw_class).strip().lower()
         if not classname: continue
         source_classname = classname
-        classname, substitution = substitute_entity_class(classname, props)
+        classname, substitution = substitute_entity_class(classname, props, substitutions)
         if substitution:
             substitution_diagnostics.append({"element_index": record.get("index"), **substitution})
         if substitution and substitution.get("status") == "rejected":

@@ -23,10 +23,10 @@ _SKIP = {"classname", "m_editoronly", "editoronly", "m_editorclass", "m_classnam
          "m_connections", "connections", "outputs", "outputconnections",
          "m_entityname", "m_entityid", "m_entityproperties"}
 _ALLOWED_PREFIXES = ("logic_", "trigger_", "func_", "info_", "point_", "env_",
-                     "filter_", "path_", "move_", "game_", "npc_", "weapon_", "light_", "prop_")
+                     "filter_", "path_", "move_", "game_", "npc_", "weapon_", "prop_")
 _ALLOWED_EXACT = {"light", "ambient_generic", "prop_detail",
                   "prop_static", "prop_dynamic", "prop_dynamic_override",
-                  "prop_physics", "prop_physics_override", "prop_physics_multiplayer", "light_environment", "light_dynamic"}
+                  "prop_physics", "prop_physics_override", "prop_physics_multiplayer", "light_environment", "light_dynamic", "light_spot"}
 
 def _scalar(value: Any) -> str | None:
     if isinstance(value, bool): return "1" if value else "0"

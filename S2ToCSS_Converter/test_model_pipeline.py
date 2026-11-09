@@ -5,6 +5,7 @@ from pathlib import Path
 
 from s2css.model_pipeline import (
     build_prop_entities,
+    process_geometry_mesh_models,
     extract_smd_material_names,
     find_model_source,
     safe_name,
@@ -16,6 +17,24 @@ from s2css.blender_export import blender_compatible_dmx_bytes, normalize_smd_mat
 
 
 class ModelPipelineTests(unittest.TestCase):
+    def test_complex_mesh_package_is_inventoried_without_blender(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            package = root / "mesh_42.json"
+            package.write_text('{"vertices": [[0,0,0]], "faces": [[0,0,0]]}', encoding="utf-8")
+            report = {
+                "meshes": [{
+                    "status": "model_candidate",
+                    "model_source_json": str(package),
+                    "model_name": "mesh_42",
+                    "cmapmesh_element_index": 42,
+                }]
+            }
+            result = process_geometry_mesh_models(report, root / "out", toolchain={})
+            self.assertEqual(len(result["models"]), 1)
+            self.assertEqual(result["models"][0]["status"], "awaiting_blender_path")
+            self.assertEqual(result["prop_entities"], [])
+
     def test_resolves_exact_relative_dmx_before_fbx(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

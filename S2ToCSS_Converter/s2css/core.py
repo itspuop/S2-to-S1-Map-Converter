@@ -599,6 +599,9 @@ def run_conversion(input_path: Path, output_dir: Path, vtfcmd='', report_callbac
                     substitution_summary = entity_result.get('entity_substitutions', {})
                     report.counts['entity_substitutions'] = substitution_summary.get('count', 0)
                     report.counts['entity_substitution_details'] = substitution_summary.get('by_mapping', {})
+                    report.counts['light_conversion_notes'] = len(entity_result.get('light_conversion_notes', []))
+                    for light_note in entity_result.get('light_conversion_notes', []):
+                        report.warnings.append(f"Light entity {light_note.get('element_index')}: {light_note.get('note')}")
                     report.counts['entity_io_connections'] = entity_result.get('connection_count', 0)
                     report.counts['model_prop_io_connections'] = entity_result.get('model_prop_connection_count', 0)
                     report.counts['entities_skipped'] = len(entity_result.get('skipped_entities', []))

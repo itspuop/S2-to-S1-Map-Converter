@@ -551,16 +551,18 @@ def export_vmap_to_vmf(vmap_path: Path, output_path: Path, report_path: Path | N
                     skipped += 1
                     mesh_key = "mesh_" + str(index) + "_" + str(node.get("guid") or "noguid")[:8]
                     mesh_json = model_export_dir / (mesh_key + ".json")
+                    model_origin = [sum(float(vertex[axis]) for vertex in vertices) / len(vertices) for axis in range(3)]
+                    model_vertices = [[float(vertex[axis]) - model_origin[axis] for axis in range(3)] for vertex in vertices]
                     mesh_payload = {
                         "name": mesh_key, "source_element_index": index,
-                        "vertices": vertices, "faces": faces,
+                        "vertices": model_vertices, "faces": faces,
                         "materials": [entry.get("source1_material", "TOOLS/TOOLSNODRAW") for entry in face_material_assignments],
                         "source_transform_baked": True,
-                        "source_origin": origin, "source_angles": angles, "source_scales": scales,
+                        "source_origin": origin, "source_angles": angles, "source_scales": scales,\n                        "model_origin": model_origin,
                     }
                     mesh_json.write_text(json.dumps(mesh_payload), encoding="utf-8")
                     item["model_source_json"] = str(mesh_json)
-                    item["model_name"] = mesh_key
+                    item["model_name"] = mesh_key\n                    item["model_origin"] = model_origin
                 else:
                     center = tuple(sum(v[k] for v in vertices) / len(vertices) for k in range(3))
                     item["vmf_solid_id"] = next_id

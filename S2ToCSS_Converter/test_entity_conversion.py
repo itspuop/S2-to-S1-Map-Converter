@@ -18,6 +18,22 @@ class EntityConversionTests(unittest.TestCase):
         self.assertIn("light_omni2 -> light", result["entity_substitutions"]["by_mapping"])
         self.assertIn("light_spot2 -> light_spot", result["entity_substitutions"]["by_mapping"])
 
+    def test_converts_light_color_brightness_and_spot_cones(self):
+        result = build_entity_conversion([
+            {"index": 34, "class": "CMapEntity", "entity_properties": {
+                "classname": "light_omni2", "color": [1.0, 0.5, 0.25], "brightness": 300
+            }},
+            {"index": 35, "class": "CMapEntity", "entity_properties": {
+                "classname": "light_spot2", "color": "255 200 150", "brightness": 250,
+                "outer_cone": 45, "inner_cone": 30, "range": 1024
+            }},
+        ])
+        self.assertEqual(result["entities"][0]["_light"], "255 127.5 63.75 300")
+        self.assertEqual(result["entities"][1]["_cone"], "45")
+        self.assertEqual(result["entities"][1]["_inner_cone"], "30")
+        self.assertEqual(result["entities"][1]["_zero_percent_distance"], "1024")
+        self.assertTrue(result["light_conversion_notes"])
+
     def test_project_substitution_override_is_supported(self):
         records = [{"index": 33, "class": "CMapEntity",
                     "entity_properties": {"classname": "light_omni2", "targetname": "omni_override"}}]
